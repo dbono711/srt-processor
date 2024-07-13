@@ -1,0 +1,11 @@
+.venv/
+.vscode/
+*.code-workspace
+*.log
+*.ts
+*.stats
+*.csv
+*.pcap
+*.pcapng
+*.processed
+*.pyc

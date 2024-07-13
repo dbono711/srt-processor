@@ -1,0 +1,17 @@
+[theme]
+base = "dark"
+primaryColor = "#E694FF" # Primary accent color for interactive elements
+backgroundColor = "#00172B" # Background color for the main content area
+secondaryBackgroundColor = "#0083B8" # Background color used for the sidebar and most interactive widgets
+textColor = "#FFF" # Color used for almost all text
+font = "sans serif" # Font family for text in the app, except code blocks ["sans serif", "serif", or "monospace"]
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
+port = 8501
+
+[client]
+toolbarMode = "developer"
