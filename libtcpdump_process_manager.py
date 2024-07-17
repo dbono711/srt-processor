@@ -3,12 +3,14 @@ import threading
 
 
 class LibTcpDumpManager:
-    def __init__(self):
+    def __init__(self, logger):
+        self.logger = logger
         self.process = None
-        self.results_path = "./pcaps/output.processed"
+        self.results_path = "./pcaps/result.processed"
 
-    def process_tcpdump(self):
-        command = "/home/ubuntu/lib-tcpdump-processing/.venv/bin/get-traffic-stats --side rcv pcaps/output.pcap"
+    def process_tcpdump(self, file) -> None:
+        command = f"/home/ubuntu/lib-tcpdump-processing/.venv/bin/get-traffic-stats --overwrite --side rcv pcaps/{file.name}"
+        self.logger.info(f"Starting process with '{command}'")
         self.process = subprocess.Popen(
             command,
             shell=True,
@@ -34,9 +36,10 @@ class LibTcpDumpManager:
 
     def get_output(self):
         with open(self.results_path, "r") as results:
-            next(results)
+            result_lines = results.readlines()
+            trimmed_results = "".join(result_lines[2:])
 
-            return results.read()
+        return trimmed_results
 
     def validate_pcap_file(self, file):
         pcap_magic_numbers = [
