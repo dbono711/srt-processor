@@ -2,6 +2,7 @@ import glob
 import os
 import time
 
+import humanize
 import pandas as pd
 import plotly.express as px
 import requests
@@ -34,15 +35,14 @@ st.title(":tv: SRT Processor")
 st.markdown(
     """
     Interactive application for presenting various statistics about 
-    [SRT](https://github.com/Haivision/srt/tree/master) flows derived 
-    from packet captures. The user has the option to either upload a 
-    ```.pcap(ng)``` file for direct processing, or spawn an SRT session 
-    to receive a stream. The application uses the 
+    [SRT](https://github.com/Haivision/srt/tree/master) flows.
+    
+    The user has the option to either upload a ```.pcap(ng)``` file containing 
+    an SRT session for processing using the 
     [lib-tcpdump-processing](https://github.com/mbakholdina/lib-tcpdump-processing) 
-    open source library for creating the statistics. When using the ```SRT``` option, 
-    additional statistics from the SRT session are also presented.
-
-    👈 Select an input method to get started.
+    open source library, or spawning an ```srt-live-transmit``` process to receive a 
+    flow. The ```SRT``` option requires a timeout to ensure it does not run indefinitely. 
+    Once expired, the application will process statistics from the flow received. 
     """
 )
 
@@ -78,64 +78,64 @@ if input_option == "Packet Capture":
                 time.sleep(15)
 
             logger.info(f"{file.name} processed successfully.")
-            results, analysis = st.tabs(["Results", "Charts"])
             output = pd.read_csv(
                 f"pcaps/{os.path.splitext(file.name)[0]}.csv", delimiter=";"
             )
-
-            with results:
+            st.subheader("lib-tcpdump-processing Results")
+            analysis, charts = st.tabs(["Analysis", "Charts"])
+            with analysis:
                 col1, col2, col3 = st.columns(3)
                 percentage_control_packets = (
                     output["srt.iscontrol"].sum() / len(output)
                 ) * 100
                 average_rtt = output["srt.rtt"].dropna().mean() / 1000
 
-                col1.metric(
-                    "Session Time", f"{output["_ws.col.cls_time"].iloc[-1]:.2f}s"
-                )
+                col1.metric("Time", f"{output["_ws.col.cls_time"].iloc[-1]:.2f}s")
                 col2.metric("Control Packets", f"{percentage_control_packets:.2f}%")
                 col3.metric("Average RTT", f"{average_rtt:.2f}ms")
 
                 st.write(libtcpdump_manager.get_output())
 
-            with analysis:
+            with charts:
                 # rtt chart
-                output["srt.rtt_ms"] = output["srt.rtt"] / 1000
-                output["_ws.col.cls_time"] = pd.to_numeric(
-                    output["_ws.col.cls_time"], errors="coerce"
+                rtt_data = output.copy()
+                rtt_data["srt.rtt_ms"] = rtt_data["srt.rtt"] / 1000
+                rtt_data["_ws.col.cls_time"] = pd.to_numeric(
+                    rtt_data["_ws.col.cls_time"], errors="coerce"
                 )
-                output = output.dropna(subset=["_ws.col.cls_time", "srt.rtt_ms"])
-                filtered_output = output[output["srt.rtt_ms"] < 100]
-                chart = px.line(
-                    filtered_output,
+                rtt_data = rtt_data.dropna(subset=["_ws.col.cls_time", "srt.rtt_ms"])
+                filtered_rtt = rtt_data[rtt_data["srt.rtt_ms"] < 100]
+                rtt_chart = px.line(
+                    filtered_rtt,
                     x="_ws.col.cls_time",
                     y="srt.rtt_ms",
                     template="seaborn",
                     title="Round Trip Time (RTT) over Time",
                     labels={"_ws.col.cls_time": "Time (s)", "srt.rtt_ms": "RTT (ms)"},
                 )
-                chart.update_layout(legend_title=None)
+                rtt_chart.update_layout(legend_title=None)
                 st.plotly_chart(
-                    chart, config={"displaylogo": False}, use_container_width=True
+                    rtt_chart, config={"displaylogo": False}, use_container_width=True
                 )
 
                 # bandwidth chart
-                output["srt.bw_mbps"] = output["srt.bw"] / 1000
-                output["_ws.col.cls_time"] = pd.to_numeric(
-                    output["_ws.col.cls_time"], errors="coerce"
+                bw_data = output.copy()
+                bw_data["srt.bw_mbps"] = bw_data["srt.bw"] / 1000
+                bw_data["_ws.col.cls_time"] = pd.to_numeric(
+                    bw_data["_ws.col.cls_time"], errors="coerce"
                 )
-                output = output.dropna(subset=["_ws.col.cls_time", "srt.bw_mbps"])
-                chart = px.line(
-                    output,
+                bw_data = bw_data.dropna(subset=["_ws.col.cls_time", "srt.bw_mbps"])
+                bw_chart = px.line(
+                    bw_data,
                     x="_ws.col.cls_time",
                     y="srt.bw_mbps",
                     template="seaborn",
                     title="Bandwidth (BW) over Time",
                     labels={"_ws.col.cls_time": "Time (s)", "srt.bw_mbps": "BW (Mbps)"},
                 )
-                chart.update_layout(legend_title=None)
+                bw_chart.update_layout(legend_title=None)
                 st.plotly_chart(
-                    chart, config={"displaylogo": False}, use_container_width=True
+                    bw_chart, config={"displaylogo": False}, use_container_width=True
                 )
 
         else:
@@ -214,3 +214,145 @@ if input_option == "SRT":
                 srt_timeout -= 1
 
             st.rerun()
+
+    if os.path.exists("srt/received.ts.stats"):
+        output = pd.read_csv("srt/received.ts.stats")
+        st.subheader("_srt-live-transmit_ results")
+        analysis, charts = st.tabs(["Analysis", "Charts"])
+
+        with analysis:
+            col1, col2, col3 = st.columns(3)
+            col1.metric(
+                "Total Bytes Received/Lost",
+                f"{humanize.naturalsize(output["byteRecv"].iloc[-1])}/{humanize.naturalsize(output["byteRcvLoss"].iloc[-1])}",
+            )
+            col2.metric(
+                "Average Round-Trip Time (RTT)", f"{output["msRTT"].mean():.2f} ms"
+            )
+            col3.metric(
+                "Average Receive Rate",
+                f"{output["mbpsRecvRate"].mean():.2f} Mbps",
+            )
+
+        # megabytes = bytes / (1024 ** 2)
+        with charts:
+            rtt_data = output.copy()
+            rtt_data = rtt_data.dropna(subset=["Timepoint", "msRTT"])
+            rtt_chart = px.line(
+                rtt_data,
+                x="Timepoint",
+                y="msRTT",
+                template="seaborn",
+                title="Round Trip Time (RTT) over Time",
+                labels={"Timepoint": "Time (s)", "msRTT": "RTT (ms)"},
+            )
+            rtt_chart.update_layout(legend_title=None)
+            st.plotly_chart(
+                rtt_chart, config={"displaylogo": False}, use_container_width=True
+            )
+
+            mbps_rcv_data = output.copy()
+            mbps_rcv_data = mbps_rcv_data.dropna(subset=["Timepoint", "mbpsRecvRate"])
+            mbps_rcv_chart = px.line(
+                mbps_rcv_data,
+                x="Timepoint",
+                y="mbpsRecvRate",
+                template="seaborn",
+                title="Receive Rate over Time",
+                labels={"Timepoint": "Time (s)", "mbpsRecvRate": "Rcv Rate (Mbps)"},
+            )
+            mbps_rcv_chart.update_layout(legend_title=None)
+            st.plotly_chart(
+                mbps_rcv_chart, config={"displaylogo": False}, use_container_width=True
+            )
+
+            # rtt_data = output.copy()
+            # rtt_data = rtt_data.dropna(subset=["Timepoint", "msRTT", "mbpsRecvRate"])
+            # filtered_rtt = rtt_data[rtt_data["msRTT"] < 100]
+
+            # # Create the initial figure with msRTT
+            # fig = px.line(
+            #     filtered_rtt,
+            #     x="Timepoint",
+            #     y="msRTT",
+            #     template="seaborn",
+            #     title="Round Trip Time (RTT) and Receive Rate over Time",
+            #     labels={"Timepoint": "Time (s)", "msRTT": "RTT (ms)"},
+            # )
+
+            # # Customize layout to include a secondary y-axis
+            # fig.update_layout(
+            #     yaxis=dict(
+            #         title="RTT (ms)",
+            #         titlefont=dict(color="#1f77b4"),
+            #         tickfont=dict(color="#1f77b4"),
+            #     ),
+            #     yaxis2=dict(
+            #         title="Receive Rate (Mbps)",
+            #         titlefont=dict(color="#ff7f0e"),
+            #         tickfont=dict(color="#ff7f0e"),
+            #         anchor="x",
+            #         overlaying="y",
+            #         side="right",
+            #     ),
+            # )
+
+            # # Add mbpsRecvRate to the figure using add_scatter
+            # fig.add_scatter(
+            #     x=filtered_rtt["Timepoint"],
+            #     y=filtered_rtt["mbpsRecvRate"],
+            #     mode="lines",
+            #     name="Receive Rate (Mbps)",
+            #     yaxis="y2",
+            # )
+
+            # # Display the chart in Streamlit
+            # st.plotly_chart(
+            #     fig, config={"displaylogo": False}, use_container_width=True
+            # )
+
+            # data = output.copy()
+            # data = data.dropna(
+            #     subset=["Timepoint", "byteRecv", "byteRcvLoss", "byteRcvDrop"]
+            # )
+
+            # # Create the initial figure with byteRecv
+            # fig = px.line(
+            #     data,
+            #     x="Timepoint",
+            #     y="byteRecv",
+            #     template="seaborn",
+            #     title="Bytes Received and Bytes Lost over Time",
+            #     labels={"Timepoint": "Time (s)", "byteRecv": "Bytes Received"},
+            # )
+
+            # # Customize layout to include a secondary and tertiary y-axis
+            # fig.update_layout(
+            #     yaxis=dict(
+            #         title="Bytes Received",
+            #         titlefont=dict(color="#1f77b4"),
+            #         tickfont=dict(color="#1f77b4"),
+            #     ),
+            #     yaxis2=dict(
+            #         title="Bytes Lost",
+            #         titlefont=dict(color="#ff7f0e"),
+            #         tickfont=dict(color="#ff7f0e"),
+            #         anchor="x",
+            #         overlaying="y",
+            #         side="right",
+            #     ),
+            # )
+
+            # # Add byteRcvLoss to the figure using add_scatter
+            # fig.add_scatter(
+            #     x=data["Timepoint"],
+            #     y=data["byteRcvLoss"],
+            #     mode="lines",
+            #     name="Bytes Lost",
+            #     yaxis="y2",
+            # )
+
+            # # Display the chart in Streamlit
+            # st.plotly_chart(
+            #     fig, config={"displaylogo": False}, use_container_width=True
+            # )

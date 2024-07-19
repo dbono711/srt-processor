@@ -12,7 +12,7 @@ class SrtProcessManager:
         self.connection_established = False
 
     def start_process(self, mode, port, timeout):
-        command = f"srt-live-transmit -fullstats -statspf:csv -stats-report-frequency:1000 -statsout:srt/received.ts.stats -loglevel:info -logfile:srt/received.ts.log -to:{timeout} srt://0.0.0.0:{port}?mode={mode} file://con > srt/received.ts"
+        command = f"srt-live-transmit -fullstats -statspf:csv -stats-report-frequency:100 -statsout:srt/received.ts.stats -loglevel:info -logfile:srt/received.ts.log -to:{timeout} srt://0.0.0.0:{port}?mode={mode} file://con > srt/received.ts"
         self.logger.info(f"Starting process with '{command}'")
         self.process = subprocess.Popen(
             command,
