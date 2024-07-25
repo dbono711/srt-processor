@@ -1,148 +1,134 @@
-from timeit import default_timer as timer
+import socket
+from ipaddress import ip_address
+from typing import Dict
 
+import ffmpeg
+import pandas as pd
 import plotly.express as px
 import streamlit as st
-from pandas import concat
+from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 
 class Toolbox:
-    """Docstring missing."""
+    """A utility class for performing various tasks such as plotting charts,
+    validating files, and handling network operations."""
 
     def __init__(self):
-        """Docstring missing."""
+        """Initialize the Toolbox class."""
+        pass
 
-    def convert_df_to_csv(self, df):
-        """Docstring missing."""
-        return df.to_csv(index=False).encode("utf-8")
+    def draw_plotly_line_chart(
+        self,
+        df: pd.DataFrame,
+        x: str = "",
+        y: str = "",
+        title: str = "",
+        color: str = None,
+        labels: Dict[str, str] = None,
+    ) -> None:
+        """Draw a Plotly line chart and display it using Streamlit.
 
-    def draw_plotly_pie_chart(self, df, values="", names="", title=""):
-        chart = px.pie(df, values=values, names=names, title=title, template="gridon")
-        chart.update_traces(
-            {
-                "textfont_size": 15,
-                "textposition": "inside",
-                "textinfo": "percent+label",
-                "hovertemplate": None,
-                "hoverinfo": "value",
-            }
-        )
+        Args:
+            df (pd.DataFrame): The DataFrame containing the data to be plotted.
+            x (str, optional): The column name for the x-axis.
+            y (str, optional): The column name for the y-axis.
+            title (str, optional): The title of the chart.
+            color (str, optional): What column should be used to color the lines.
+            labels (dict, optional): A dictionary for renaming labels.
+        """
+        if labels is None:
+            labels = {}
 
-        return st.plotly_chart(
-            chart, config={"displaylogo": False}, use_container_width=True
-        )
-
-    def draw_plotly_bar_chart(self, df, xaxis, yaxis, color="", title=""):
-        """Docstring missing."""
-        chart = px.bar(
-            df,
-            title=title,
-            x=xaxis,
-            y=yaxis,
-            color=color,
-            template="seaborn",
-            text=df.percentage,
-        )
-        chart.update_layout(legend_title=None)
-        chart.update_traces(
-            {
-                "textfont_size": 15,
-                "textangle": 0,
-                "textposition": "outside",
-                "cliponaxis": False,
-                "hovertemplate": None,
-            }
-        )
-
-        return st.plotly_chart(
-            chart, config={"displaylogo": False}, use_container_width=True
-        )
-
-    def draw_plotly_line_chart(self, df, title=""):
-        chart = px.line(
-            df,
-            title=title,
-            template="seaborn",
-            markers=True,
-        )
-        chart.update_layout(legend_title=None)
-        chart.update_traces(
-            {
-                "name": "count",
-                "textfont_size": 15,
-                "cliponaxis": False,
-                "hovertemplate": None,
-            }
-        )
-
-        return st.plotly_chart(
-            chart, config={"displaylogo": False}, use_container_width=True
-        )
-
-    def df_counts_and_percentage(self, df, *columns):
-        """Docstring missing."""
-        # Normalize the percentage of each unique combination in the DataFrame based on the column
-        result = df.value_counts(columns[0], normalize=True).reset_index(
-            name="percentage"
-        )
-
-        # Multiply the percentages by the total count to get the actual counts
-        result["count"] = result["percentage"] * df.shape[0]
-
-        # Format to show percentage
-        result["percentage"] = result["percentage"].mul(100).round(1).astype(str) + "%"
-
-        return result
-
-    def download_df(self, df, name):
-        """Docstring missing."""
-        file_name = f"nso_{name.lower()}.csv".replace(" ", "_")
-
-        return st.download_button(
-            label=f"Download {name}",
-            data=self.convert_df_to_csv(df),
-            type="primary",
-            use_container_width=True,
-            file_name=file_name,
-            mime="text/csv",
-        )
-
-    def df_vertical_stack(self, frames):
-        """Docstring missing."""
-        return concat(frames, axis=0)
-
-    def df_horizontal_stack(self, frames):
-        """Docstring missing."""
-        return concat(frames, axis=1)
-
-    def search_df_values(self, df, condition):
-        """Docstring missing."""
-        for index, row in df.iterrows():
-            if condition(row):
-                yield row
-
-    def add_dict_value(self, dict_obj, key, value):
-        """Adds a key-value pair to the dictionary. If the key already exists
-        in the dictionary, it will associate multiple values with that key
-        instead of overwritting its value"""
-        if key not in dict_obj:
-            dict_obj[key] = value
-
-        elif isinstance(dict_obj[key], list):
-            dict_obj[key].append(value)
-
+        if color is None:
+            chart = px.line(
+                df, x=x, y=y, title=title, template="seaborn", labels=labels
+            )
         else:
-            dict_obj[key] = [dict_obj[key], value]
+            chart = px.line(
+                df,
+                x=x,
+                y=y,
+                title=title,
+                template="seaborn",
+                color=color,
+                labels=labels,
+            )
 
-    @staticmethod
-    def timer_func(func):
-        """Dosctring missing."""
+        chart.update_layout(
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(chart, config={"displaylogo": False}, use_container_width=True)
 
-        def wrapper(*args, **kwargs):
-            t_start = timer()
-            result = func(*args, **kwargs)
-            t_end = timer()
-            st.write(f"**Response time:**  {(t_end - t_start):.4f} seconds")
+    def validate_pcap_file(self, file: UploadedFile) -> bool:
+        """Validates if a file is a valid pcap or pcapng using magic numbers
 
-            return result
+        Args:
+            file (UploadFile): A Streamlit mutable uploaded file
 
-        return wrapper
+        Returns:
+            bool: True if the file is a valid pcap or pcapng, False if not
+        """
+        pcap_magic_numbers = [
+            b"\xd4\xc3\xb2\xa1",
+            b"\xa1\xb2\xc3\xd4",
+            b"\x4d\x3c\xb2\xa1",
+            b"\xa1\xb2\x3c\x4d",
+        ]
+        pcapng_magic_number = b"\x0a\x0d\x0d\x0a"
+
+        try:
+            magic_number = file.read(4)
+            if (
+                magic_number in pcap_magic_numbers
+                or magic_number == pcapng_magic_number
+            ):
+                return True
+            else:
+                return False
+        except Exception as e:
+            st.error(f"Error reading file: {e}")
+            return False
+
+    def get_primary_ip_address(self) -> str:
+        """Return the primary IP address of the host this script is running on
+
+        Returns:
+            str: Primary IP address of host
+        """
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            primary_ip = s.getsockname()[0]
+            s.close()
+
+            return primary_ip
+
+        except Exception as e:
+            return st.error(f"An error occurred: {e}")
+
+    def convert_ts_to_mp4(self, input_file: str, output_file: str):
+        """Convert a Transport Stream (TS) to an MP4
+
+        Args:
+            input_file (str): Input .ts file
+            output_file (str): Output .mp4 file
+        """
+        try:
+            ffmpeg.input(input_file).output(output_file).run()
+        except ffmpeg.Error as e:
+            st.error(f"Error occurred: {e.stderr.decode('utf8')}")
+
+    def validate_ipv4_address(self, ipv4_address: str) -> bool:
+        """Validate an address is a valid IPv4 address
+
+        Args:
+            ipv4_address (str): IPv4 address in dotted decimal notation
+
+        Returns:
+            bool: True if the address is a valid IPv4 address, else False
+        """
+        try:
+            ip_address(ipv4_address)
+            return True
+        except ValueError:
+            return False

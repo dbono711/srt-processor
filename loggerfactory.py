@@ -7,21 +7,24 @@ class LoggerFactory(object):
     _LOG = None
 
     @staticmethod
-    def __create_logger(log_file, log_level):
-        """
-        A private method that interacts with the python
+    def __create_logger(log_file: str, log_level: str):
+        """A private method that interacts with the python
         logging module
+
+        Args:
+            log_file (str): Name of the log file
+            log_level (str): Logging level
         """
         # set the logging format
         log_format = "%(asctime)s:%(levelname)s:%(message)s"
 
-        # Initialize the class variable with logger object
+        # initialize the class variable with logger object
         LoggerFactory._LOG = logging.getLogger(log_file)
         logging.basicConfig(
             level=logging.INFO,
             format=log_format,
             datefmt="%Y-%m-%d %H:%M:%S",
-            filename="logs/app.log",
+            filename=f"logs/{log_file}.log",
         )
 
         # set the logging level based on the user selection
@@ -34,9 +37,12 @@ class LoggerFactory(object):
         return LoggerFactory._LOG
 
     @staticmethod
-    def get_logger(log_file, log_level):
-        """
-        A static method called by other modules to initialize logger in
-        their own module
+    def get_logger(log_file: str, log_level: str):
+        """A static method called by other modules to initialize
+        logger in their own module
+
+        Args:
+            log_file (str): Name of the log file
+            log_level (str): Logging level
         """
         return LoggerFactory.__create_logger(log_file, log_level)
