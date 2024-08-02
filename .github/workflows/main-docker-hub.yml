@@ -12,14 +12,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Build the Docker image
         run: docker build --tag ${{ env.IMAGE_NAME }}:latest --file Dockerfile . --no-cache
 
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Test the Docker image
         run: docker run -d -p 8501:8501 --name srt-processor ${{ env.IMAGE_NAME }}:latest
 
@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -47,21 +47,10 @@ jobs:
           push: true
           tags: ${{ env.IMAGE_NAME }}:main, ${{ env.IMAGE_NAME }}:latest
   
-      - name: Update Docker Hub description
-        env:
-          DOCKER_HUB_ACCESS_TOKEN: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          IMAGE_NAME: dbono711/srt-processor
-        run: |
-          # Install curl and jq for API requests
-          sudo apt-get update && sudo apt-get install -y curl jq
-
-          # Get the short and full descriptions
-          SHORT_DESCRIPTION="Streamlit application for processing SRT session statistics"
-          FULL_DESCRIPTION=$(cat README.md)
-
-          # Update the Docker Hub repository description
-          curl -s -X PATCH "https://hub.docker.com/v2/repositories/${DOCKER_USERNAME}/${IMAGE_NAME}/" \
-            -H "Authorization: JWT ${DOCKER_HUB_ACCESS_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "{\"full_description\": \"${FULL_DESCRIPTION}\", \"description\": \"${SHORT_DESCRIPTION}\"}"
+      - name: Docker Hub Description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          repository: dbono711/srt-processor
+          short-description: ${{ github.event.repository.description }}
