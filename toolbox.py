@@ -36,23 +36,17 @@ class Toolbox:
             color (str, optional): What column should be used to color the lines.
             labels (dict, optional): A dictionary for renaming labels.
         """
-        if labels is None:
-            labels = {}
+        labels = labels or {}
 
-        if color is None:
-            chart = px.line(
-                df, x=x, y=y, title=title, template="seaborn", labels=labels
-            )
-        else:
-            chart = px.line(
-                df,
-                x=x,
-                y=y,
-                title=title,
-                template="seaborn",
-                color=color,
-                labels=labels,
-            )
+        chart = px.line(
+            df,
+            x=x,
+            y=y,
+            title=title,
+            template="seaborn",
+            color=color,
+            labels=labels,
+        )
 
         chart.update_layout(
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)

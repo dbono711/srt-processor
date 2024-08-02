@@ -83,13 +83,14 @@ class SrtProcessManager(ProcessManager):
             time.sleep(1)
 
     def extract_connected_ip_port(self):
-        pattern = r"(\d+\.\d+\.\d+\.\d+):(\d+)"
+        pattern = r"from peer @\d+ \((\d+\.\d+\.\d+\.\d+:\d+)\)"
 
         with open("./srt/received.ts.log", "r") as log:
-            matches = re.findall(pattern, log.read())
-            result = {(match[0], match[1]) for match in matches}
-
-            return list(result)
+            match = re.search(pattern, log.read())
+            if match:
+                return match.group(1)
+            else:
+                return "error: unable to determine connected host"
 
     def get_connection_status(self):
         return self.connection_established

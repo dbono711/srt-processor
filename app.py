@@ -32,8 +32,103 @@ def get_srt_process_manager(_logger):
     return SrtProcessManager(_logger)
 
 
+def handle_file_upload(file):
+    if not toolbox.validate_pcap_file(file):
+        st.sidebar.error("Invalid capture file detected.")
+        return
+
+    logger.info("User successfully uploaded a valid capture file.")
+    st.sidebar.success("Valid capture file detected.")
+    save_uploaded_file(file)
+    process_file(file)
+    display_analysis_and_charts(file)
+
+
+def save_uploaded_file(file):
+    with open(f"./pcaps/{file.name}", "wb") as pcap:
+        pcap.write(file.getbuffer())
+
+
+def process_file(file):
+    with st.spinner(f"Processing '{file.name}'"):
+        libtcpdump_manager.start_process(file)
+        time.sleep(15)
+    logger.info(f"{file.name} processed successfully.")
+
+
+def display_analysis_and_charts(file):
+    output = pd.read_csv(f"./pcaps/{os.path.splitext(file.name)[0]}.csv", delimiter=";")
+
+    analysis, charts = st.tabs(["Analysis", "Charts"])
+    with analysis:
+        display_analysis(output)
+    with charts:
+        display_charts(output)
+
+
+def display_analysis(output):
+    col1, col2, col3 = st.columns(3)
+    percentage_control_packets = (output["srt.iscontrol"].sum() / len(output)) * 100
+    average_rtt = output["srt.rtt"].dropna().mean() / 1000
+
+    col1.metric("Time", f"{output['_ws.col.Time'].iloc[-1]:.2f}s")
+    col2.metric("Control Packets", f"{percentage_control_packets:.2f}%")
+    col3.metric("Average RTT", f"{average_rtt:.2f}ms")
+
+    st.write(libtcpdump_manager.get_output())
+
+
+def display_charts(output):
+    draw_rtt_chart(output)
+    draw_bw_chart(output)
+
+
+def draw_rtt_chart(output):
+    rtt_data = output.copy()
+    rtt_data["srt.rtt_ms"] = rtt_data["srt.rtt"] / 1000
+    rtt_data["_ws.col.Time"] = pd.to_numeric(rtt_data["_ws.col.Time"], errors="coerce")
+    rtt_data = rtt_data.dropna(subset=["_ws.col.Time", "srt.rtt_ms"])
+    toolbox.draw_plotly_line_chart(
+        rtt_data,
+        x="_ws.col.Time",
+        y="srt.rtt_ms",
+        title="Round Trip Time (RTT) over Time",
+        labels={"_ws.col.Time": "Time (s)", "srt.rtt_ms": "RTT (ms)"},
+    )
+
+
+def draw_bw_chart(output):
+    bw_data = output.copy()
+    bw_data["srt.bw_mbps"] = bw_data["srt.bw"] / 1000
+    bw_data["_ws.col.Time"] = pd.to_numeric(bw_data["_ws.col.Time"], errors="coerce")
+    bw_data = bw_data.dropna(subset=["_ws.col.Time", "srt.bw_mbps"])
+    toolbox.draw_plotly_line_chart(
+        bw_data,
+        x="_ws.col.Time",
+        y="srt.bw_mbps",
+        title="Bandwidth (BW) over Time",
+        labels={"_ws.col.Time": "Time (s)", "srt.bw_mbps": "BW (Mbps)"},
+    )
+
+
+def display_media():
+    display_video = st.checkbox("Display media")
+
+    if display_video:
+        mp4_path = "./srt/received.mp4"
+        ts_path = "./srt/received.ts"
+
+        if os.path.exists(mp4_path):
+            st.video(mp4_path)
+        else:
+            with st.spinner("Converting MPEG-TS to MP4..."):
+                toolbox.convert_ts_to_mp4(input_file=ts_path, output_file=mp4_path)
+
+            st.experimental_rerun()
+
+
 st.set_page_config(page_title="SRT Processor", layout="wide")
-st.title(":tv: SRT Processor")
+st.title("SRT Processor")
 st.subheader("Interactive application for presenting SRT session statistics")
 
 toolbox = get_toolbox()
@@ -44,10 +139,11 @@ srt_manager = get_srt_process_manager(logger)
 _PUBLIC_IP = requests.get("https://api.ipify.org").content.decode("utf8")
 _PRIVATE_IP = toolbox.get_primary_ip_address()
 
-input_option = st.sidebar.selectbox(
+input_option = st.selectbox(
     "Select an input method",
     ["SRT", "Packet Capture"],
-    placeholder="Select option",
+    placeholder="Select an input method",
+    label_visibility="collapsed",
     index=None,
 )
 
@@ -62,78 +158,11 @@ if input_option == "Packet Capture":
     )
     logger.info(f"User selected '{input_option}'")
     file = st.sidebar.file_uploader(
-        "Packet capture containing an SRT stream",
-        type=[".pcap", ".pcapng"],
-        label_visibility="collapsed",
+        "Upload SRT packet capture file", type=[".pcap", ".pcapng"]
     )
 
     if file is not None:
-        validated_file = toolbox.validate_pcap_file(file)
-
-        if validated_file:
-            logger.info("User successfully uploaded a valid capture file.")
-            st.sidebar.success("Valid capture file detected.")
-
-            # save uploaded file
-            with open(f"./pcaps/{file.name}", "wb") as pcap:
-                pcap.write(file.getbuffer())
-
-            with st.spinner(f"Processing '{file.name}'"):
-                libtcpdump_manager.start_process(file)
-                time.sleep(15)
-
-            logger.info(f"{file.name} processed successfully.")
-            output = pd.read_csv(
-                f"./pcaps/{os.path.splitext(file.name)[0]}.csv", delimiter=";"
-            )
-
-            analysis, charts = st.tabs(["Analysis", "Charts"])
-            with analysis:
-                col1, col2, col3 = st.columns(3)
-                percentage_control_packets = (
-                    output["srt.iscontrol"].sum() / len(output)
-                ) * 100
-                average_rtt = output["srt.rtt"].dropna().mean() / 1000
-
-                col1.metric("Time", f"{output['_ws.col.Time'].iloc[-1]:.2f}s")
-                col2.metric("Control Packets", f"{percentage_control_packets:.2f}%")
-                col3.metric("Average RTT", f"{average_rtt:.2f}ms")
-
-                st.write(libtcpdump_manager.get_output())
-
-            with charts:
-                # rtt chart
-                rtt_data = output.copy()
-                rtt_data["srt.rtt_ms"] = rtt_data["srt.rtt"] / 1000
-                rtt_data["_ws.col.Time"] = pd.to_numeric(
-                    rtt_data["_ws.col.Time"], errors="coerce"
-                )
-                rtt_data = rtt_data.dropna(subset=["_ws.col.Time", "srt.rtt_ms"])
-                toolbox.draw_plotly_line_chart(
-                    rtt_data,
-                    x="_ws.col.Time",
-                    y="srt.rtt_ms",
-                    title="Round Trip Time (RTT) over Time",
-                    labels={"_ws.col.Time": "Time (s)", "srt.rtt_ms": "RTT (ms)"},
-                )
-
-                # bw chart
-                bw_data = output.copy()
-                bw_data["srt.bw_mbps"] = bw_data["srt.bw"] / 1000
-                bw_data["_ws.col.Time"] = pd.to_numeric(
-                    bw_data["_ws.col.Time"], errors="coerce"
-                )
-                bw_data = bw_data.dropna(subset=["_ws.col.Time", "srt.bw_mbps"])
-                toolbox.draw_plotly_line_chart(
-                    bw_data,
-                    x="_ws.col.Time",
-                    y="srt.bw_mbps",
-                    title="Bandwidth (BW) over Time",
-                    labels={"_ws.col.Time": "Time (s)", "srt.bw_mbps": "BW (Mbps)"},
-                )
-
-        else:
-            st.sidebar.error("Invalid capture file detected.")
+        handle_file_upload(file)
 
 # srt
 if input_option == "SRT":
@@ -232,14 +261,13 @@ if input_option == "SRT":
 
                 if srt_manager.get_connection_status():
                     st.session_state.srt_connected = True
-                    result = srt_manager.extract_connected_ip_port()
-                    connected.info(
-                        f"Connected with ```{result[0][0]}:{result[0][1]}```"
-                    )
+                    connected_host = srt_manager.extract_connected_ip_port()
+                    connected.info(f"Connected with ```{connected_host}```")
 
                 time.sleep(1)
                 srt_timeout -= 1
 
+            srt_manager.connection_established = False
             st.rerun()
 
     if os.path.exists("./srt/received.ts.stats"):
@@ -265,6 +293,7 @@ if input_option == "SRT":
                     {output['pktRcvRetrans'].iloc[-1]}",
                 )
 
+                # rtt
                 with st.expander("Round-Trip Time (RTT)"):
                     st.write(
                         """
@@ -293,6 +322,7 @@ if input_option == "SRT":
                         },
                     )
 
+                # available bandwidth/receive rate
                 with st.expander("Available Bandwidth & Receive Rate"):
                     st.write(
                         """
@@ -340,6 +370,7 @@ if input_option == "SRT":
                         labels={"Timepoint": "Time (s)", "Value": "Mbps", "Metric": ""},
                     )
 
+                # available receive buffer/receive buffer
                 with st.expander("Available Receive Buffer & Receive Buffer"):
                     st.write(
                         """
@@ -414,6 +445,7 @@ if input_option == "SRT":
                         use_container_width=True,
                     )
 
+                # packet stats
                 with st.expander("Packets Received, Lost, Dropped, & Retransmitted"):
                     st.write(
                         """
@@ -472,19 +504,9 @@ if input_option == "SRT":
                     )
 
             with playback:
-                if st.checkbox("Show captured video"):
-                    if os.path.exists("./srt/received.mp4"):
-                        video_file = open("./srt/received.mp4", "rb")
-                        st.video(video_file)
-                    else:
-                        toolbox.convert_ts_to_mp4(
-                            "./srt/received.ts", "./srt/received.mp4"
-                        )
-                        st.rerun()
+                display_media()
 
-            with raw_data:
-                st.dataframe(output, use_container_width=True, hide_index=True)
-
+            raw_data.dataframe(output, use_container_width=True, hide_index=True)
         else:
             st.error("No SRT session statistics were created")
 
