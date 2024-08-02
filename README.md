@@ -16,20 +16,20 @@ To build the Docker image locally from the Dockerfile included in this repositor
 1. Clone the repository:
 
     ```shell
-    git clone https://github.com/yourusername/your-repo-name.git
-    cd your-repo-name
+    git clone https://github.com/dbono711/srt-processor.git
+    cd srt-processor
     ```
 
 2. Build the Docker image:
 
     ```shell
-    docker build -t your-image-name .
+    docker build -t srt-processor .
     ```
 
 3. Run the Docker container with port forwarding:
 
     ```shell
-    docker run -d -p 8501:8501 your-image-name
+    docker run -d -p 8501:8501 srt-processor
     ```
 
 ## Pulling the Docker Image from Docker Hub
@@ -39,13 +39,13 @@ Alternatively, you can pull the pre-built Docker image from my Docker Hub:
 1. Pull the Docker image from Docker Hub:
 
     ```shell
-    docker pull yourdockerhubusername/your-image-name:latest
+    docker pull dbono711/srt-processor:latest
     ```
 
 2. Run the Docker container with port forwarding:
 
     ```shell
-    docker run -d -p 8501:8501 yourdockerhubusername/your-image-name:latest
+    docker run -d -p 8501:8501 dbono711/srt-processor:latest
     ```
 
 ## Accessing the Application
@@ -74,14 +74,14 @@ Before proceeding, ensure you have the following installed:
 
 Clone the repository to your local machine using the following command:
 
-```git clone https://github.com/your-username/your-repo-name.git```
+```git clone https://github.com/dbono711/srt-processor.git```
 
 2. Open the Repository in VS Code
 
 Navigate to the cloned repository folder and open it in VS Code:
 
 ```shell
-cd your-repo-name
+cd srt-processor
 code .
 ```
 

@@ -9,25 +9,22 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build:
+  build_and_test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
       - name: Build the Docker image
         run: docker build --tag ${{ env.IMAGE_NAME }}:latest --file Dockerfile . --no-cache
-
-  test:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
+      
       - name: Test the Docker image
         run: docker run -d -p 8501:8501 --name srt-processor ${{ env.IMAGE_NAME }}:latest
 
   push_to_registry:
     name: Push Docker image to Docker Hub
     runs-on: ubuntu-latest
-    needs: test
+    needs: build_and_test
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
