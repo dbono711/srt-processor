@@ -2,12 +2,19 @@
 
 ## Overview
 
-```srt-processor``` is an interactive [Streamlit](https://streamlit.io/) application for presenting statistics about SRT flows. It offers the user the ability to either a upload a ```.pcap(ng)``` file containing an SRT session for processing using the [lib-tcpdump-processing](https://github.com/mbakholdina/lib-tcpdump-processing) open source library, or spawn an [srt-live-transmit](https://github.com/Haivision/srt/blob/master/docs/apps/srt-live-transmit.md) process to receive a flow.
+```srt-processor``` is a containerized, interactive [Streamlit](https://streamlit.io/) application for presenting statistics about SRT flows. It offers the ability to either a upload a ```.pcap(ng)``` file containing an SRT session for processing using the [lib-tcpdump-processing](https://github.com/mbakholdina/lib-tcpdump-processing) open source library, or spawn an [srt-live-transmit](https://github.com/Haivision/srt/blob/master/docs/apps/srt-live-transmit.md) process to receive a flow.
 
 ## Prerequisites
 
 - Docker installed on your local machine
 - Git installed on your local machine
+
+## Container Ports
+
+The container exposes the following ports for connectivity:
+
+- (TCP) port 8501 for accessing the Streamlit application
+- (UDP) ports 9000-9100 for SRT sessions
 
 ## Building the Docker Image Locally
 
@@ -26,15 +33,15 @@ To build the Docker image locally from the Dockerfile included in this repositor
     docker build -t srt-processor .
     ```
 
-3. Run the Docker container with port forwarding:
+3. Run the Docker container with port forwarding (adjust accordingly for mapping to available ports on your host):
 
     ```shell
-    docker run -d -p 8501:8501 srt-processor
+    docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp srt-processor
     ```
 
 ## Pulling the Docker Image from Docker Hub
 
-Alternatively, you can pull the pre-built Docker image from my Docker Hub:
+Alternatively, you can pull the pre-built Docker image from Docker Hub:
 
 1. Pull the Docker image from Docker Hub:
 
@@ -42,19 +49,15 @@ Alternatively, you can pull the pre-built Docker image from my Docker Hub:
     docker pull dbono711/srt-processor:latest
     ```
 
-2. Run the Docker container with port forwarding:
+2. Run the Docker container with port forwarding (adjust accordingly for mapping to available ports on your host):
 
     ```shell
-    docker run -d -p 8501:8501 dbono711/srt-processor:latest
+    docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp dbono711/srt-processor:latest
     ```
 
 ## Accessing the Application
 
-After starting the Docker container, you can access the Streamlit application by navigating to: ```http://localhost:8501```
-
-## Additional Information
-
-- Ensure that port 8501 is not being used by other applications on your local machine.
+After starting the Docker container, you can access the Streamlit application by navigating to: ```http://<host ip>:8501```
 
 ## Setting Up Development Environment with VS Code Development Containers
 
@@ -96,7 +99,7 @@ Alternatively, you can click on the green button at the bottom-left corner of th
 
 VS Code will use the configuration in the .devcontainer folder to build and start a Docker container. This process might take a few minutes, especially the first time, as it needs to pull the Docker image and set up the environment.
 
-Once the container is ready, you will be connected to the development environment inside the container. You can now start coding and utilize the development tools configured in the container.
+Once the container is ready, you will be connected to the development environment inside the container. You can now start coding and utilize the development tools configured in the container. To run the Streamlit applicaiton, simply open up a ```New Terminal``` in the VS Code development container and run ```streamlit run app.py```. Note that the [devcontainer.json](.devcontainer/devcontainer.json) file is only forwarding ports 8501 and 9000. Adjust accordingly for your host.
 
 ## License
 

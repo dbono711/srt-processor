@@ -12,6 +12,4 @@ gatherUsageStats = false
 [server]
 headless = true
 port = 8501
-
-[client]
-toolbarMode = "developer"
+maxUploadSize = 500

@@ -50,5 +50,8 @@ RUN pip install --user -r docker_dev_requirements.txt
 # Create a symbolic link to the srt-live-transmit executable in the user's local binary directory
 RUN ln -s /app/srt/srt-live-transmit /root/.local/bin
 
-# Expose port 8501 for the Streamlit application
-EXPOSE 8501
+# Expose TCP port 8501 for the Streamlit application
+EXPOSE 8501/tcp
+
+# Expose UDP ports 9000-9100 for the SRT sessions
+EXPOSE 9000-9100/udp
