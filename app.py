@@ -6,6 +6,7 @@ import pandas as pd
 import plotly_express as px
 import requests
 import streamlit as st
+from streamlit import runtime
 
 from loggerfactory import LoggerFactory
 from process_manager import LibTcpDumpManager, SrtProcessManager
@@ -13,26 +14,65 @@ from toolbox import Toolbox
 
 
 @st.cache_resource
-def get_toolbox():
+def get_toolbox() -> Toolbox:
+    """
+    Retrieve a cached instance of the Toolbox.
+
+    Returns:
+        Toolbox: An instance of the Toolbox class.
+    """
     return Toolbox()
 
 
 @st.cache_resource
-def get_app_logger():
+def get_app_logger() -> LoggerFactory:
+    """
+    Retrieve a cached instance of the application logger.
+
+    Returns:
+        Logger: A logger instance with the name 'app' and log level 'WARNING'.
+    """
     return LoggerFactory.get_logger("app", log_level="WARNING")
 
 
 @st.cache_resource
-def get_libtcpdump_manager(_logger):
+def get_libtcpdump_manager(_logger) -> LibTcpDumpManager:
+    """
+    Retrieve a cached instance of the LibTcpDumpManager.
+
+    Args:
+        _logger (Logger): Logger instance to be used by LibTcpDumpManager.
+
+    Returns:
+        LibTcpDumpManager: An instance of the LibTcpDumpManager class.
+    """
     return LibTcpDumpManager(_logger)
 
 
 @st.cache_resource
-def get_srt_process_manager(_logger):
+def get_srt_process_manager(_logger) -> SrtProcessManager:
+    """
+    Retrieve a cached instance of the SrtProcessManager.
+
+    Args:
+        _logger (Logger): Logger instance to be used by SrtProcessManager.
+
+    Returns:
+        SrtProcessManager: An instance of the SrtProcessManager class.
+    """
     return SrtProcessManager(_logger)
 
 
-def handle_file_upload(file):
+def handle_file_upload(file: runtime.uploaded_file_manager.UploadedFile) -> None:
+    """
+    Handle the upload of a file, validating and processing it.
+
+    Args:
+        file (UploadedFile): The uploaded file to handle.
+
+    Returns:
+        None
+    """
     if not toolbox.validate_pcap_file(file):
         st.sidebar.error("Invalid capture file detected.")
         return
@@ -44,19 +84,48 @@ def handle_file_upload(file):
     display_analysis_and_charts(file)
 
 
-def save_uploaded_file(file):
+def save_uploaded_file(file: runtime.uploaded_file_manager.UploadedFile) -> None:
+    """
+    Save the uploaded file to the local filesystem.
+
+    Args:
+        file (UploadedFile): The file to save.
+
+    Returns:
+        None
+    """
     with open(f"./pcaps/{file.name}", "wb") as pcap:
         pcap.write(file.getbuffer())
 
 
-def process_file(file):
+def process_file(file: runtime.uploaded_file_manager.UploadedFile) -> None:
+    """
+    Process the uploaded file by starting the tcpdump process.
+
+    Args:
+        file (UploadedFile): The file to process.
+
+    Returns:
+        None
+    """
     with st.spinner(f"Processing '{file.name}'"):
         libtcpdump_manager.start_process(file)
         time.sleep(15)
     logger.info(f"{file.name} processed successfully.")
 
 
-def display_analysis_and_charts(file):
+def display_analysis_and_charts(
+    file: runtime.uploaded_file_manager.UploadedFile,
+) -> None:
+    """
+    Display the analysis and charts for the processed file.
+
+    Args:
+        file (UploadedFile): The file for which to display analysis and charts.
+
+    Returns:
+        None
+    """
     output = pd.read_csv(f"./pcaps/{os.path.splitext(file.name)[0]}.csv", delimiter=";")
 
     analysis, charts = st.tabs(["Analysis", "Charts"])
@@ -66,7 +135,16 @@ def display_analysis_and_charts(file):
         display_charts(output)
 
 
-def display_analysis(output):
+def display_analysis(output: pd.DataFrame) -> None:
+    """
+    Display the analysis metrics from the processed file output.
+
+    Args:
+        output (pd.DataFrame): The DataFrame containing the processed file output.
+
+    Returns:
+        None
+    """
     col1, col2, col3 = st.columns(3)
     percentage_control_packets = (output["srt.iscontrol"].sum() / len(output)) * 100
     average_rtt = output["srt.rtt"].dropna().mean() / 1000
@@ -78,12 +156,30 @@ def display_analysis(output):
     st.write(libtcpdump_manager.get_output())
 
 
-def display_charts(output):
+def display_charts(output: pd.DataFrame) -> None:
+    """
+    Display the charts based on the processed file output.
+
+    Args:
+        output (pd.DataFrame): The DataFrame containing the processed file output.
+
+    Returns:
+        None
+    """
     draw_rtt_chart(output)
     draw_bw_chart(output)
 
 
-def draw_rtt_chart(output):
+def draw_rtt_chart(output: pd.DataFrame) -> None:
+    """
+    Draw the Round Trip Time (RTT) chart based on the output data.
+
+    Args:
+        output (pd.DataFrame): The DataFrame containing the processed file output.
+
+    Returns:
+        None
+    """
     rtt_data = output.copy()
     rtt_data["srt.rtt_ms"] = rtt_data["srt.rtt"] / 1000
     rtt_data["_ws.col.Time"] = pd.to_numeric(rtt_data["_ws.col.Time"], errors="coerce")
@@ -97,7 +193,16 @@ def draw_rtt_chart(output):
     )
 
 
-def draw_bw_chart(output):
+def draw_bw_chart(output: pd.DataFrame) -> None:
+    """
+    Draw the Bandwidth (BW) chart based on the output data.
+
+    Args:
+        output (pd.DataFrame): The DataFrame containing the processed file output.
+
+    Returns:
+        None
+    """
     bw_data = output.copy()
     bw_data["srt.bw_mbps"] = bw_data["srt.bw"] / 1000
     bw_data["_ws.col.Time"] = pd.to_numeric(bw_data["_ws.col.Time"], errors="coerce")
@@ -111,7 +216,13 @@ def draw_bw_chart(output):
     )
 
 
-def display_media():
+def display_media() -> None:
+    """
+    Display media content if the user opts to do so, converting files if necessary.
+
+    Returns:
+        None
+    """
     display_video = st.checkbox("Display media")
 
     if display_video:
@@ -124,7 +235,7 @@ def display_media():
             with st.spinner("Converting MPEG-TS to MP4..."):
                 toolbox.convert_ts_to_mp4(input_file=ts_path, output_file=mp4_path)
 
-            st.experimental_rerun()
+            st.rerun()
 
 
 st.set_page_config(page_title="SRT Processor", layout="wide")
@@ -149,6 +260,8 @@ input_option = st.selectbox(
 
 # packet capture
 if input_option == "Packet Capture":
+    logger.info(f"User selected '{input_option}'")
+
     st.markdown(
         """
         Upload a ```.pcap(ng)``` file containing an SRT session for processing using the 
@@ -156,7 +269,6 @@ if input_option == "Packet Capture":
         open source library
         """
     )
-    logger.info(f"User selected '{input_option}'")
     file = st.sidebar.file_uploader(
         "Upload SRT packet capture file", type=[".pcap", ".pcapng"]
     )
@@ -166,6 +278,8 @@ if input_option == "Packet Capture":
 
 # srt
 if input_option == "SRT":
+    logger.info(f"User selected '{input_option}'")
+
     st.markdown(
         """
         Spawn an [srt-live-transmit](https://github.com/Haivision/srt/blob/master/docs/apps/srt-live-transmit.md) 
@@ -174,13 +288,13 @@ if input_option == "SRT":
         but will always be the receiver from a session flow perspective.
         """
     )
-    logger.info(f"User selected '{input_option}'")
     st.session_state.srt_connected = False
 
     with st.sidebar.container():
-        st.warning("SRT Version: 1.5.3")
         submit_status = False
-
+        version = st.radio(
+            "Select SRT Version", ["1.5.3", "1.5.0", "1.4.4"], horizontal=True, index=0
+        )
         srt_mode = st.radio(
             "Select connection mode",
             ["Caller", "Listener"],
@@ -188,7 +302,7 @@ if input_option == "SRT":
             help="""
             **Listener**: The 'agent' (this application) waits to be contacted by any peer caller.
             
-            **Caller** (COMING SOON): The 'agent' (this application) sends the connection request to the peer, 
+            **Caller**: The 'agent' (this application) sends the connection request to the peer, 
             which must be listener, and this way it initiates the connection.
             """,
         )
@@ -218,7 +332,6 @@ if input_option == "SRT":
             format="%d",
             help="Port for the SRT session (9000-9100).",
         )
-
         srt_timeout = st.number_input(
             "Select timeout",
             min_value=30,
@@ -231,7 +344,6 @@ if input_option == "SRT":
             is required to ensure the process does not run indefinitely.
             """,
         )
-
         submitted = st.button("Submit", disabled=submit_status)
 
     if srt_mode == "Listener":
@@ -240,17 +352,17 @@ if input_option == "SRT":
         message = f"Attempting connectivity to ```{srt_ip}:{srt_port}```"
 
     if submitted:
-        logger.info(f"User selected '{input_option}'")
         with st.spinner(message):
             srt_manager.start_process(
+                version,
                 mode=str(srt_mode).lower(),
                 port=srt_port,
                 timeout=srt_timeout,
                 ip=srt_ip,
             )
-
             counter = st.empty()
             connected = st.empty()
+
             while srt_timeout > 0:
                 counter.info(f"SRT session expires in ```{srt_timeout}``` seconds")
 
@@ -274,7 +386,10 @@ if input_option == "SRT":
         if os.stat("./srt/received.ts.stats").st_size != 0:
             output = pd.read_csv("./srt/received.ts.stats")
 
-            results, playback, raw_data = st.tabs(["Results", "Playback", "Raw Data"])
+            results, playback, raw_data = st.tabs(
+                ["Results", "Playback", "Raw Session Data"]
+            )
+
             with results:
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("Time", f"{output['Time'].iloc[-1] / 1000:.1f}s")
@@ -522,6 +637,7 @@ if input_option is None:
         "*.mp4",
     ]
     folders = ["./pcaps/", "./srt/"]
+
     for ext in file_extensions:
         for folder in folders:
             for file_path in glob.glob(os.path.join(folder, ext)):
