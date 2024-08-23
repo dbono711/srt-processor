@@ -15,30 +15,36 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     cmake \
     build-essential \
+    iproute2 \
     && rm -rf /var/lib/apt/lists/* # Clean up the package lists to reduce image size
 
-# Set the working directory to /app
-WORKDIR /app
-
 # Clone the lib-tcpdump-processing repository
-RUN git clone https://github.com/mbakholdina/lib-tcpdump-processing.git /app/libtcpdump
+RUN git clone https://github.com/mbakholdina/lib-tcpdump-processing.git /opt/libtcpdump
 
 # Change the working directory to the cloned repository
-WORKDIR /app/libtcpdump
+WORKDIR /opt/libtcpdump
 
 # Install the Python package in the user's local directory
 RUN pip install --user .
 
 # Clone the SRT repository
-RUN git clone https://github.com/Haivision/srt.git /app/srt
+RUN git clone https://github.com/Haivision/srt.git /opt/srt
 
-# Change the working directory to the SRT repository
-WORKDIR /app/srt
+# Define the SRT versions you want to build
+ARG SRT_VERSIONS="v1.4.4 v1.5.0 v1.5.3"
 
-# Build the SRT project
-RUN cmake . && make
+# Loop through each version, checkout, build in a version-specific 'build' directory, and create symbolic link
+RUN for version in ${SRT_VERSIONS}; do \
+    cd /opt/srt && \
+    git checkout $version && \
+    mkdir -p build_$version && \
+    cd build_$version && \
+    cmake .. && \
+    make && \
+    ln -s /opt/srt/build_$version/srt-live-transmit /root/.local/bin/srt-live-transmit-$version; \
+    done
 
-# Change the working directory back to /app
+# Change the working directory to /app
 WORKDIR /app
 
 # Copy the current directory contents into the container's /app directory
@@ -46,9 +52,6 @@ COPY . .
 
 # Install the Python dependencies listed in docker_requirements.txt in the user's local directory
 RUN pip install --user -r docker_requirements.txt
-
-# Create a symbolic link to the srt-live-transmit executable in the user's local binary directory
-RUN ln -s /app/srt/srt-live-transmit /root/.local/bin
 
 # Expose TCP port 8501 for the Streamlit application
 EXPOSE 8501/tcp
