@@ -252,7 +252,7 @@ _PRIVATE_IP = toolbox.get_primary_ip_address()
 
 input_option = st.selectbox(
     "Select an input method",
-    ["SRT", "Packet Capture"],
+    ["Live Transmit", "Packet Capture"],
     placeholder="Select an input method",
     label_visibility="collapsed",
     index=None,
@@ -276,8 +276,8 @@ if input_option == "Packet Capture":
     if file is not None:
         handle_file_upload(file)
 
-# srt
-if input_option == "SRT":
+# live transmit
+if input_option == "Live Transmit":
     logger.info(f"User selected '{input_option}'")
 
     st.markdown(
