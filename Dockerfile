@@ -1,7 +1,7 @@
 # Use the official slim Python image as the base image
 FROM python:3.11-slim
 
-# Set the PATH environment variable to include user's local binary directory
+# Set the PATH environment variable to include the root user's local binary directory
 ENV PATH="/root/.local/bin:${PATH}"
 
 # Upgrade pip to the latest version
@@ -24,13 +24,13 @@ RUN git clone https://github.com/mbakholdina/lib-tcpdump-processing.git /opt/lib
 # Change the working directory to the cloned repository
 WORKDIR /opt/libtcpdump
 
-# Install the Python package in the user's local directory
+# Install the Python package in the root user's local directory
 RUN pip install --user .
 
 # Clone the SRT repository
 RUN git clone https://github.com/Haivision/srt.git /opt/srt
 
-# Define the SRT versions you want to build
+# Define the SRT versions to build
 ARG SRT_VERSIONS="v1.4.4 v1.5.0 v1.5.3"
 
 # Loop through each version, checkout, build in a version-specific 'build' directory, and create symbolic link
@@ -50,7 +50,7 @@ WORKDIR /app
 # Copy the current directory contents into the container's /app directory
 COPY . .
 
-# Install the Python dependencies listed in docker_requirements.txt in the user's local directory
+# # Install the Python dependencies listed in docker_requirements.txt in the root user's local directory
 RUN pip install --user -r docker_requirements.txt
 
 # Expose TCP port 8501 for the Streamlit application
