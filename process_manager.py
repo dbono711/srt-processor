@@ -1,9 +1,11 @@
+import json
 import os
 import re
 import subprocess
 import threading
 import time
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 
 class ProcessManager:
@@ -26,6 +28,7 @@ class ProcessManager:
         """
         if self.process:
             return self.process.poll() is None
+
         return False
 
     def stop_process(self) -> None:
@@ -187,3 +190,147 @@ class SrtProcessManager(ProcessManager):
             bool: True if the connection is established, False otherwise.
         """
         return self.connection_established
+
+    def check_for_valid_mpeg_ts(self) -> Optional[bool]:
+        """
+        Checks whether the specified file is a valid MPEG-TS (MPEG Transport Stream) format.
+
+        This function uses `ffprobe` to analyze the format of the file located at "srt/received.ts".
+        It returns `True` if the file is identified as an MPEG-TS format, `False` if not, and `None`
+        if an error occurs during the process.
+
+        Returns:
+            Optional[bool]:
+                - `True` if the file format is MPEG-TS.
+                - `False` if the file format is not MPEG-TS or format information is missing.
+                - `None` if an error occurs during the subprocess execution or JSON parsing.
+        """
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-show_format",
+                    "-of",
+                    "json",
+                    "srt/received.ts",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+
+            output = json.loads(result.stdout)
+            if "format" in output and "format_name" in output["format"]:
+                if output["format"]["format_name"] == "mpegts":
+                    return True
+
+            return False
+
+        except subprocess.CalledProcessError as e:
+            self.logger.info(f"An error occurred while checking the file: {e}")
+            return None
+        except json.JSONDecodeError as e:
+            self.logger.info(f"Failed to parse JSON output: {e}")
+            return None
+
+    def show_mpeg_ts_programs(self) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves the MPEG-TS (MPEG Transport Stream) programs from the specified file.
+
+        This function uses `ffprobe` to extract program information from the file located at "srt/received.ts".
+        It returns the program details in JSON format if available, or `None` if no programs are found or
+        if an error occurs during the process.
+
+        Returns:
+            Optional[Dict[str, Any]]:
+                - A dictionary containing the programs information if programs are found.
+                - `None` if no programs are found or if an error occurs during the subprocess execution or JSON parsing.
+        """
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-show_programs",
+                    "-of",
+                    "json",
+                    "srt/received.ts",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+
+            output = json.loads(result.stdout)
+            if "programs" in output:
+                return output
+
+            return None
+
+        except subprocess.CalledProcessError as e:
+            self.logger.info(f"An error occurred while checking the file: {e}")
+            return None
+        except json.JSONDecodeError as e:
+            self.logger.info(f"Failed to parse JSON output: {e}")
+            return None
+
+    def add_network_emulation(self, intf: str, delay: int) -> None:
+        """
+        Adds network emulation to a specified network interface using the `tc` (traffic control) command.
+
+        This method applies a network delay to the specified interface by running a shell command that
+        uses `tc` to add a network emulation (netem) rule. The delay is applied in milliseconds. If an
+        error occurs during the process, it is logged.
+
+        Args:
+            intf (str): The name of the network interface to which the network emulation will be applied.
+            delay (int): The delay in milliseconds to be added to the network interface.
+
+        Returns:
+            None
+        """
+        try:
+            subprocess.run(
+                [
+                    "tc",
+                    "qdisc",
+                    "add",
+                    "dev",
+                    f"{intf}",
+                    "root",
+                    "netem",
+                    "delay",
+                    f"{delay}ms",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            self.logger.info(f"An error occurred while enabling network emulation: {e}")
+
+    def clear_network_emulation(self, intf: str) -> None:
+        """
+        Removes network emulation from a specified network interface using the `tc` (traffic control) command.
+
+        This method removes any network emulation rules (netem) applied to the specified interface by running
+        a shell command that uses `tc`. If an error occurs during the process, it is logged.
+
+        Args:
+            intf (str): The name of the network interface from which the network emulation will be removed.
+
+        Returns:
+            None
+        """
+        try:
+            subprocess.run(
+                ["tc", "qdisc", "del", "dev", f"{intf}", "root", "netem"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            self.logger.info(f"An error occurred while removing network emulation: {e}")

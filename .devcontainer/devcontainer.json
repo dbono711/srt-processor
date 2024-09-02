@@ -5,7 +5,10 @@
         "dockerfile": "Dockerfile",
         "args": {}
     },
-    "runArgs": ["--name=srt-processor-dev"],
+    "runArgs": [
+        "--name=srt-processor-dev",
+        "--cap-add=NET_ADMIN"
+    ],
     "features": {},
     "customizations": {
         "vscode": {

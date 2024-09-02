@@ -108,7 +108,9 @@ class Toolbox:
             output_file (str): Output .mp4 file
         """
         try:
-            ffmpeg.input(input_file).output(output_file).run()
+            video = ffmpeg.input(input_file).output(output_file)
+
+            ffmpeg.run(video)
         except ffmpeg.Error as e:
             st.error(f"Error occurred: {e.stderr.decode('utf8')}")
 
