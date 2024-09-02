@@ -33,10 +33,10 @@ To build the Docker image locally from the Dockerfile included in this repositor
     docker build -t srt-processor .
     ```
 
-3. Run the Docker container with port forwarding (adjust accordingly for mapping to available ports on your host):
+3. Run the Docker container with port forwarding (adjust accordingly for mapping to available ports on your host). Note that the ```--cap-add=NET_ADMIN``` argument is required in order to utilize the network emulation options.
 
     ```shell
-    docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp srt-processor
+    docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp --cap-add=NET_ADMIN srt-processor
     ```
 
 ## Pulling the Docker Image from Docker Hub
@@ -49,10 +49,10 @@ Alternatively, you can pull the pre-built Docker image from Docker Hub:
     docker pull dbono711/srt-processor:latest
     ```
 
-2. Run the Docker container with port forwarding (adjust accordingly for mapping to available ports on your host):
+2. Run the Docker container with port forwarding (adjust accordingly for mapping to available ports on your host). Note that the ```--cap-add=NET_ADMIN``` argument is required in order to utilize the network emulation options.
 
     ```shell
-    docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp dbono711/srt-processor:latest
+    docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp --cap-add=NET_ADMIN dbono711/srt-processor:latest
     ```
 
 ## Accessing the Application

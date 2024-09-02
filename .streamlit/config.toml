@@ -6,10 +6,15 @@ secondaryBackgroundColor = "#3a709b" # - Background color used for the sidebar a
 textColor = "#ffffff" # Color used for almost all text
 font = "sans serif" # Font family for text in the app, except code blocks ["sans serif", "serif", or "monospace"]
 
-[browser]
-gatherUsageStats = false
-
 [server]
 headless = true
 port = 8501
-maxUploadSize = 500
+maxUploadSize = 400
+enableXsrfProtection = true
+enableWebsocketCompression = true
+
+[logger]
+level = "error"
+
+[browser]
+gatherUsageStats = false
