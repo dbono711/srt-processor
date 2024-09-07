@@ -50,7 +50,7 @@ WORKDIR /app
 # Copy the current directory contents into the container's /app directory
 COPY . .
 
-# # Install the Python dependencies listed in docker_requirements.txt in the root user's local directory
+# Install the Python dependencies listed in docker_requirements.txt in the root user's local directory
 RUN pip install --user -r docker_requirements.txt
 
 # Expose TCP port 8501 for the Streamlit application
