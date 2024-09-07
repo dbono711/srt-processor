@@ -2,7 +2,6 @@ import socket
 from ipaddress import ip_address
 from typing import Dict
 
-import ffmpeg
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -99,20 +98,6 @@ class Toolbox:
 
         except Exception as e:
             return st.error(f"An error occurred: {e}")
-
-    def convert_ts_to_mp4(self, input_file: str, output_file: str):
-        """Convert a Transport Stream (TS) to an MP4
-
-        Args:
-            input_file (str): Input .ts file
-            output_file (str): Output .mp4 file
-        """
-        try:
-            video = ffmpeg.input(input_file).output(output_file)
-
-            ffmpeg.run(video)
-        except ffmpeg.Error as e:
-            st.error(f"Error occurred: {e.stderr.decode('utf8')}")
 
     def validate_ipv4_address(self, ipv4_address: str) -> bool:
         """Validate an address is a valid IPv4 address

@@ -13,6 +13,9 @@ maxUploadSize = 400
 enableXsrfProtection = true
 enableWebsocketCompression = true
 
+[client]
+toolbarMode = "minimal"
+
 [logger]
 level = "error"
 

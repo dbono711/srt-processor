@@ -47,14 +47,14 @@ RUN for version in ${SRT_VERSIONS}; do \
 # Change the working directory to /app
 WORKDIR /app
 
-# # Copy the Docker development requirements into the container's /app directory
+# Copy the Docker development requirements into the container's /app directory
 COPY docker_dev_requirements.txt .
 
-# # Install the Python dependencies listed in docker_requirements.txt in the root user's local directory
+# Install the Python dependencies listed in docker_requirements.txt in the root user's local directory
 RUN pip install --user -r docker_dev_requirements.txt
 
-# # Expose TCP port 8501 for the Streamlit application
+# Expose TCP port 8501 for the Streamlit application
 EXPOSE 8501/tcp
 
-# # Expose UDP ports 9000-9100 for the SRT sessions
+# Expose UDP ports 9000-9100 for the SRT sessions
 EXPOSE 9000-9100/udp

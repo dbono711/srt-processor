@@ -2,12 +2,14 @@
 
 ## Overview
 
-```srt-processor``` is a containerized, interactive [Streamlit](https://streamlit.io/) application for presenting statistics about SRT flows. It offers the ability to either a upload a ```.pcap(ng)``` file containing an SRT session for processing using the [lib-tcpdump-processing](https://github.com/mbakholdina/lib-tcpdump-processing) open source library, or spawn an [srt-live-transmit](https://github.com/Haivision/srt/blob/master/docs/apps/srt-live-transmit.md) process to receive a flow.
+Interactive platform designed to serve as both a learning environment and a troubleshooting tool for analyzing Secure Reliable Transport (SRT) flows, enabling users to explore the intricacies of SRT, offering hands-on experience with live data and captured session files.
+
+The platform is designed with flexibility in mind, allowing users to either upload Packet Capture (PCAP/PCAPNG) files containing SRT session data or initiate live SRT streams for real-time analysis. Through a combination of open-source tools and custom processing libraries, ```srt-processor``` provides a comprehensive view of SRT statistics, offering invaluable insights for network engineers, developers, and anyone interested in mastering SRT protocols.
 
 ## Prerequisites
 
 - Docker installed on your local machine
-- Git installed on your local machine
+- Git installed on your local machine (only required if [building locally](#building-the-docker-image-locally) or [development](#setting-up-development-environment-with-vs-code-development-containers))
 
 ## Container Ports
 
@@ -99,7 +101,7 @@ Alternatively, you can click on the green button at the bottom-left corner of th
 
 VS Code will use the configuration in the .devcontainer folder to build and start a Docker container. This process might take a few minutes, especially the first time, as it needs to pull the Docker image and set up the environment.
 
-Once the container is ready, you will be connected to the development environment inside the container. You can now start coding and utilize the development tools configured in the container. To run the Streamlit applicaiton, simply open up a ```New Terminal``` in the VS Code development container and run ```streamlit run app.py```. Note that the [devcontainer.json](.devcontainer/devcontainer.json) file is only forwarding ports 8501 and 9000. Adjust accordingly for your host.
+Once the container is ready, you will be connected to the development environment inside the container. You can now start coding and utilize the development tools configured in the container. To run the Streamlit applicaiton, simply open up a ```New Terminal``` in the VS Code development container and run ```streamlit run --client.toolbarMode developer Home.py```. Note that the [devcontainer.json](.devcontainer/devcontainer.json) file is only forwarding ports 8501 and 9000. Adjust accordingly for your host.
 
 ## License
 
