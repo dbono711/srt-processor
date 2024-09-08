@@ -60,4 +60,4 @@ EXPOSE 8501/tcp
 EXPOSE 9000-9100/udp
 
 # Define the command to run the Streamlit application
-CMD streamlit run app.py
+CMD streamlit run Home.py
