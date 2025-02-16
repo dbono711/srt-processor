@@ -465,12 +465,10 @@ else:
             buffer_chart.update_layout(
                 yaxis=dict(
                     title="Receive Buffer (ms)",
-                    titlefont=dict(color="#1f77b4"),
                     tickfont=dict(color="#1f77b4"),
                 ),
                 yaxis2=dict(
                     title="Available Receive Buffer (Bytes)",
-                    titlefont=dict(color="#ff7f0e"),
                     tickfont=dict(color="#ff7f0e"),
                     anchor="x",
                     overlaying="y",
