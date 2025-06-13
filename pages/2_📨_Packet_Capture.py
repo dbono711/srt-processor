@@ -1,10 +1,8 @@
 import os
 import time
-
 import pandas as pd
 import streamlit as st
 from streamlit import runtime
-
 from process_manager import LibTcpDumpManager
 
 

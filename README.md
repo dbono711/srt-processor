@@ -4,7 +4,7 @@
 
 Interactive platform designed to serve as both a learning environment and a troubleshooting tool for analyzing Secure Reliable Transport (SRT) flows, enabling users to explore the intricacies of SRT, offering hands-on experience with live data and captured session files.
 
-The platform is designed with flexibility in mind, allowing users to either upload Packet Capture (PCAP/PCAPNG) files containing SRT session data or initiate live SRT streams for real-time analysis. Through a combination of open-source tools and custom processing libraries, ```srt-processor``` provides a comprehensive view of SRT statistics, offering invaluable insights for network engineers, developers, and anyone interested in mastering SRT protocols.
+The application allows users to either upload Packet Capture (PCAP/PCAPNG) files containing SRT session data or initiate live SRT streams for real-time analysis. Through a combination of open-source tools and custom processing libraries, ```srt-processor``` provides a comprehensive view of SRT statistics, offering invaluable insights for network engineers, developers, and anyone interested in mastering SRT protocols.
 
 ## Prerequisites
 
@@ -38,7 +38,11 @@ To build the Docker image locally from the Dockerfile included in this repositor
 3. Run the Docker container with port forwarding (adjust accordingly for mapping to available ports on your host). Note that the ```--cap-add=NET_ADMIN``` argument is required in order to utilize the network emulation options.
 
     ```shell
-    docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp --cap-add=NET_ADMIN srt-processor
+    docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp --cap-add=NET_ADMIN --name srt-processor-dev srt-processor:latest
+    ```
+
+    ```shell
+    docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp -v $(pwd):/app --cap-add=NET_ADMIN --name srt-processor-dev srt-processor:latest
     ```
 
 ## Pulling the Docker Image from Docker Hub
@@ -54,12 +58,47 @@ Alternatively, you can pull the pre-built Docker image from Docker Hub:
 2. Run the Docker container with port forwarding (adjust accordingly for mapping to available ports on your host). Note that the ```--cap-add=NET_ADMIN``` argument is required in order to utilize the network emulation options.
 
     ```shell
-    docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp --cap-add=NET_ADMIN dbono711/srt-processor:latest
+    docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp --name srt-processor --cap-add=NET_ADMIN dbono711/srt-processor:latest
     ```
 
 ## Accessing the Application
 
 After starting the Docker container, you can access the Streamlit application by navigating to: ```http://<host ip>:8501```
+
+## Example: Streaming to SRT Processor as a listener
+
+You can use FFmpeg to stream media to the SRT Processor application when it's configured as a listener. Here's an example of how to set up an SRT caller flow to stream video to the application:
+
+1. First, ensure the SRT Processor application is running and configured in Listener mode on the desired port (e.g., 9000).
+
+2. Use the following FFmpeg command to stream a video file to the SRT Processor:
+
+    ```shell
+    docker run --rm -v $(pwd):$(pwd) -w $(pwd) \
+        --name ffmpeg-stream jrottenberg/ffmpeg:4.4-ubuntu \
+        -stats \
+        -re \
+        -i sample_1280x720_surfing_with_audio.mp4 \
+        -c:v libx264 -b:v 2500k -g 60 -keyint_min 60 \
+        -profile:v main \
+        -preset fast \
+        -f mpegts "srt://<container-ip>:9000?pkt_size=1316"
+    ```
+
+    Replace `<container-ip>` with the IP address of your SRT Processor container, and adjust the input file path as needed.
+
+3. Command breakdown:
+   - `-stats`: Shows encoding progress statistics
+   - `-re`: Reads input at native frame rate (simulates a live source)
+   - `-c:v libx264`: Uses H.264 video codec
+   - `-b:v 2500k`: Sets video bitrate to 2500 kbps
+   - `-g 60 -keyint_min 60`: Sets GOP size and minimum keyframe interval to 60 frames
+   - `-profile:v main`: Uses the "main" H.264 profile
+   - `-preset fast`: Balances encoding speed and compression efficiency
+   - `-f mpegts`: Sets output format to MPEG Transport Stream
+   - `pkt_size=1316`: Optimizes SRT packet size for network transmission
+
+4. Once the stream starts, you should see the SRT statistics updating in the SRT Processor web interface.
 
 ## Setting Up Development Environment with VS Code Development Containers
 

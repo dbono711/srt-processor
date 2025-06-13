@@ -1,13 +1,14 @@
 import os
 import time
-from typing import Any, List, Optional, Tuple
-
 import netifaces
 import pandas as pd
 import plotly_express as px
 import streamlit as st
-
+from typing import Any, List, Optional, Tuple
 from process_manager import SrtProcessManager
+
+# constants
+_SRT_STATS = "./srt/received.ts.stats"
 
 
 @st.cache_resource
@@ -158,9 +159,397 @@ def start_srt_session(
     )
 
 
+def load_and_process_statistics(stats_file: str) -> pd.DataFrame | None:
+    """Load and process SRT statistics from a CSV file.
+    
+    Args:
+        stats_file (str): Path to the statistics file
+        
+    Returns:
+        pd.DataFrame or None: Processed statistics or None if error
+    """
+    try:
+        # Load the CSV file
+        data = pd.read_csv(stats_file)
+        
+        # Calculate the jitter by taking the absolute differences between consecutive msRTT values
+        data["jitter"] = data["msRTT"].diff().abs()
+        return data
+    except Exception as e:
+        st.error(f"Error loading statistics file: {e}")
+        st.session_state.logger.error(f"Failed to load statistics: {e}")
+        return None
+
+
+def display_session_metrics(data: pd.DataFrame) -> None:
+    """Display key session metrics at the top of the page.
+
+    Args:
+        data (pd.DataFrame): The processed statistics data
+
+    Returns:
+        None
+    """
+    # Create columns for metrics
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    # Display key metrics
+    col1.metric("Session Time", f"{data['Time'].iloc[-1] / 1000:.1f}s")
+    col2.metric("Average Receive Rate", f"{data['mbpsRecvRate'].mean():.2f}Mbps")
+    col3.metric("Average Round-Trip Time", f"{data['msRTT'].mean():.2f}ms")
+    col4.metric("Average Jitter", f"{data['jitter'].mean():.2f}ms")
+    col5.metric(
+        "Pkts Rcvd/Lost/Dropped/Retrans",
+        f"{data['pktRecv'].iloc[-1]}/\
+        {data['pktRcvLoss'].iloc[-1]}/\
+        {data['pktRcvDrop'].iloc[-1]}/\
+        {data['pktRcvRetrans'].iloc[-1]}",
+    )
+
+
+def display_rtt_jitter_metrics(data: pd.DataFrame) -> None:
+    """Display RTT and jitter metrics with explanations and charts.
+    
+    Args:
+        data (pd.DataFrame): The processed statistics data
+    """
+    with st.expander("Round-Trip Time (RTT) & Jitter"):
+        st.write(
+            """
+            ```Round-Trip Time``` and ```Jitter``` are key metrics for performance in an SRT 
+            session, revealing any periods of high delay or instability that could affect the 
+            quality of service. These metrics provide critical insights into network performance, 
+            but they represent different aspects of the connection.
+
+            _**Direct Correlation:**_ In many cases, an increase in ```Round-Trip Time``` might 
+            lead to an increase in ```Jitter```, as network congestion or instability can affect 
+            both. However, this is not always the case. It is possible to have a high 
+            ```Round-Trip Time``` with relatively low ```Jitter```, meaning that the delay is 
+            consistent. Similarly, low ```Round-Trip Time``` with high ```Jitter``` indicates 
+            rapid fluctuations in network performance.
+
+            _**Importance in Performance:**_ While ```Round-Trip Time``` is important for determining 
+            the overall speed of a connection, ```Jitter``` is crucial for assessing the stability of 
+            that connection. Real-time applications can often tolerate higher ```Round-Trip Time``` 
+            if the ```Jitter``` remains low, ensuring smooth packet delivery.
+            """
+        )
+
+        # Prepare data for visualization
+        rtt_jitter_data = data.copy()
+        rtt_jitter_data = rtt_jitter_data.dropna(
+            subset=["Timepoint", "msRTT", "jitter"]
+        )
+
+        rtt_jitter_data = rtt_jitter_data.melt(
+            id_vars=["Timepoint"],
+            value_vars=["msRTT", "jitter"],
+            var_name="Metric",
+            value_name="Value",
+        )
+
+        rtt_jitter_data["Metric"] = rtt_jitter_data["Metric"].map(
+            {
+                "msRTT": "Round-Trip Time (RTT)",
+                "jitter": "Jitter",
+            }
+        )
+
+        # Draw the chart
+        st.session_state.toolbox.draw_plotly_line_chart(
+            rtt_jitter_data,
+            x="Timepoint",
+            y="Value",
+            title="Round-Trip Time (RTT) and Jitter over Time",
+            color="Metric",
+            labels={
+                "Timepoint": "Time (s)",
+                "Value": "Milliseconds (ms)",
+                "Metric": "",
+            },
+        )
+
+
+def display_bandwidth_metrics(data: pd.DataFrame) -> None:
+    """Display bandwidth and receive rate metrics with explanations and charts.
+    
+    Args:
+        data (pd.DataFrame): The processed statistics data
+    """
+    with st.expander("Available Bandwidth & Receive Rate"):
+        st.write(
+            """
+            The ```Available Bandwidth``` indicates the maximum potential data transfer
+            rate that the network can support, while the ```Receive Rate``` shows the actual
+            rate at which data is being received.
+
+            _**Comparison of Capacity and Usage:**_ The ```Available Bandwidth``` value sets
+            the upper limit of what the network can handle, while the ```Receive Rate```
+            shows the actual usage of that capacity.
+
+            _**Performance Monitoring:**_ If the ```Receive Rate``` is consistently close to
+            the ```Available Bandwidth```, it suggests that the network is being fully utilized,
+            and there may be a risk of congestion or data loss if the demand increases further.
+            Conversely, if the ```Receive Rate``` is significantly lower than the
+            ```Available Bandwidth```, it might indicate underutilization of the network resources.
+            """
+        )
+
+        # Prepare data for visualization
+        capacity_data = data.copy()
+        capacity_data = capacity_data.dropna(
+            subset=["Timepoint", "mbpsBandwidth", "mbpsRecvRate"]
+        )
+
+        capacity_data = capacity_data.melt(
+            id_vars=["Timepoint"],
+            value_vars=["mbpsBandwidth", "mbpsRecvRate"],
+            var_name="Metric",
+            value_name="Value",
+        )
+
+        capacity_data["Metric"] = capacity_data["Metric"].map(
+            {
+                "mbpsBandwidth": "Available Bandwidth",
+                "mbpsRecvRate": "Receive Rate",
+            }
+        )
+
+        # Draw the chart
+        st.session_state.toolbox.draw_plotly_line_chart(
+            capacity_data,
+            x="Timepoint",
+            y="Value",
+            title="Receive Rate and Available Bandwidth over Time",
+            color="Metric",
+            labels={"Timepoint": "Time (s)", "Value": "Mbps", "Metric": ""},
+        )
+
+
+def display_buffer_metrics(data: pd.DataFrame) -> None:
+    """Display buffer metrics with explanations and charts.
+    
+    Args:
+        data (pd.DataFrame): The processed statistics data
+    """
+    with st.expander("Available Receive Buffer & Receive Buffer"):
+        st.write(
+            """
+            The ```Available Receive Buffer``` represents how much of the
+            buffer's capacity remains available in terms of bytes, while the
+            ```Receive Buffer``` provides context on the total
+            buffer capacity in terms of time. Together, these metrics help in managing
+            and optimizing buffer usage.
+
+            _**Indications:**_ A consistently high ```Available Receive Buffer``` value
+            suggests that the buffer has plenty of available space, indicating efficient
+            processing of incoming data, while ```Receive Buffer``` provides the
+            understanding of how the buffer capacity in terms of time varies, which is useful
+            for assessing the temporal aspects of buffering and processing delays.
+            """
+        )
+        # Prepare data for visualization
+        buffer_data = data.copy()
+        buffer_data = buffer_data.dropna(
+            subset=["Timepoint", "byteAvailRcvBuf", "msRcvBuf"]
+        )
+        
+        # Create the chart with dual y-axes
+        buffer_chart = px.line(
+            buffer_data,
+            x="Timepoint",
+            y="msRcvBuf",
+            template="seaborn",
+            title="Available Receive Buffer and Receive Buffer over Time",
+            labels={
+                "Timepoint": "Time (s)",
+                "msRcvBuf": "Receive Buffer (ms)",
+            },
+        )
+        buffer_chart.data[0].name = "Receive Buffer (ms)"
+        buffer_chart.data[0].showlegend = True
+
+        # Add byteAvailRcvBuf to the chart
+        buffer_chart.add_scatter(
+            x=buffer_data["Timepoint"],
+            y=buffer_data["byteAvailRcvBuf"],
+            mode="lines",
+            name="Available Receive Buffer (Bytes)",
+            yaxis="y2",
+            showlegend=True,
+        )
+
+        # Customize layout to include a secondary y-axis
+        buffer_chart.update_layout(
+            yaxis=dict(
+                title="Receive Buffer (ms)",
+                tickfont=dict(color="#1f77b4"),
+            ),
+            yaxis2=dict(
+                title="Available Receive Buffer (Bytes)",
+                tickfont=dict(color="#ff7f0e"),
+                anchor="x",
+                overlaying="y",
+                side="right",
+            ),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1,
+            ),
+        )
+
+        # Display the chart
+        st.plotly_chart(
+            buffer_chart,
+            config={"displaylogo": False},
+            use_container_width=True,
+        )
+
+
+def display_packet_metrics(data: pd.DataFrame) -> None:
+    """Display packet statistics with explanations and charts.
+    
+    Args:
+        data (pd.DataFrame): The processed statistics data
+    """
+    with st.expander("Packets Received, Lost, Dropped, Retransmitted"):
+        st.write(
+            """
+            The ```Packets Received``` indicates the total number of packets successfully
+            received by the receiver, the ```Received Packets Lost``` indicates the total
+            number of packets that were expected but never received by the receiver, the
+            ```Received Packets Dropped``` shows the number of packets that were received
+            by the receiver but subsequently discarded, and the ```Received Packets Retransmitted```
+            represents the number of packets that were retransmitted and subsequently
+            received by the receiver.
+            """
+        )
+        # Prepare data for visualization
+        packet_data = data.copy()
+        packet_data = packet_data.dropna(
+            subset=[
+                "Timepoint",
+                "pktRecv",
+                "pktRcvLoss",
+                "pktRcvDrop",
+                "pktRcvRetrans",
+            ]
+        )
+
+        packet_data = packet_data.melt(
+            id_vars=["Timepoint"],
+            value_vars=[
+                "pktRecv",
+                "pktRcvLoss",
+                "pktRcvDrop",
+                "pktRcvRetrans",
+            ],
+            var_name="Metric",
+            value_name="Value",
+        )
+
+        packet_data["Metric"] = packet_data["Metric"].map(
+            {
+                "pktRecv": "Packets Received",
+                "pktRcvLoss": "Received Packets Lost",
+                "pktRcvDrop": "Received Packets Dropped",
+                "pktRcvRetrans": "Received Packets Retransmitted",
+            }
+        )
+
+        # Draw the chart
+        st.session_state.toolbox.draw_plotly_line_chart(
+            packet_data,
+            x="Timepoint",
+            y="Value",
+            color="Metric",
+            title="Packets Received, Lost, Dropped, & Retransmitted over Time",
+            labels={
+                "Timepoint": "Time (s)",
+                "Value": "Packets",
+                "Metric": "",
+            },
+        )
+
+
+def display_transport_stream_data(srt_manager: SrtProcessManager) -> None:
+    """Display transport stream data if available.
+    
+    Args:
+        srt_manager (SrtProcessManager): The SRT process manager instance
+    """
+    if srt_manager.check_for_valid_mpeg_ts():
+        programs = srt_manager.show_mpeg_ts_programs()
+
+        # Display programs dataframe
+        programs_df = pd.json_normalize(programs["programs"]).drop(
+            columns=["tags.service_provider", "streams"]
+        )
+        st.dataframe(programs_df, hide_index=True, use_container_width=True)
+
+        # Process streams data
+        streams_data = []
+        for program in programs["programs"]:
+            streams_data.extend(program["streams"])
+
+        # Define base columns for streams
+        base_columns = [
+            "index",
+            "codec_name",
+            "codec_long_name",
+            "profile",
+            "codec_type",
+            "width",
+            "height",
+            "display_aspect_ratio",
+            "field_order",
+            "start_time",
+            "duration",
+            "bit_rate",
+            "tags.language",
+        ]
+
+        # Extract only columns that exist in the data
+        present_columns = [
+            col
+            for col in base_columns
+            if col in pd.json_normalize(streams_data, errors="ignore").columns
+        ]
+
+        # Display streams dataframe
+        streams_df = pd.json_normalize(streams_data, errors="ignore")[
+            present_columns
+        ]
+        st.dataframe(streams_df, hide_index=True, use_container_width=True)
+
+        # Add download button
+        with open("srt/received.ts", "rb") as file:
+            st.download_button(
+                label="Download MPEG-TS",
+                data=file,
+                file_name="received.ts",
+            )
+    else:
+        st.error("No valid MPEG-TS detected")
+
+
+def display_raw_data(data: pd.DataFrame) -> None:
+    """Display raw session data in a dataframe.
+    
+    Args:
+        data (pd.DataFrame): The processed statistics data
+    """
+    st.dataframe(data, use_container_width=True, hide_index=True)
+
+
+# check if toolbox is initialized
 if "toolbox" not in st.session_state:
     st.switch_page("Home.py")
 
+# initialize page setup
 st.set_page_config(page_title="SRT Processor", layout="wide")
 st.title("SRT Live Transmit Analysis")
 st.markdown(
@@ -175,18 +564,21 @@ st.markdown(
     """
 )
 
-_HOST_INTERFACES = get_interfaces_with_ip()
-_SRT_STATS = "./srt/received.ts.stats"
-
+# initialize srt manager
 srt_manager = _get_srt_process_manager(st.session_state.logger)
 
 # determine the state of 'submit_disabled' based on 'srt_submitted'
 st.session_state["submit_disabled"] = st.session_state.get("srt_submitted", False)
 
+# initialize sidebar
 with st.sidebar.container():
+    
+    # SRT version selection
     srt_version = st.radio(
         "Select version", ["1.5.3", "1.5.0", "1.4.4"], horizontal=True, index=0
     )
+    
+    # SRT mode selection
     srt_mode = st.radio(
         "Select connection mode",
         ["Caller", "Listener"],
@@ -198,26 +590,38 @@ with st.sidebar.container():
         which must be listener.
         """,
     )
-    host_interfaces = [f"{intf[0]}:{intf[1]}" for intf in _HOST_INTERFACES]
+    host_interfaces = [f"{intf[0]}:{intf[1]}" for intf in get_interfaces_with_ip()]
     selected_interface = st.selectbox("Select host interface", host_interfaces)
     selected_interface_name = selected_interface.split(":")[0]
     selected_interface_ip = selected_interface.split(":")[1]
 
+    # srt_mode == "Listener"
     if srt_mode == "Listener":
         srt_ip = selected_interface_ip
-    else:  # srt_mode == "Caller"
-        srt_ip = st.text_input(
+    
+    # srt_mode == "Caller"
+    else:
+        # get listener IP address with integrated validation
+        listener_ip = st.text_input(
             "*IPv4 address of listener",
             help="IPv4 address in dotted decimal notation (i.e., 192.168.1.7).",
             placeholder="Enter a valid IPv4 address",
+            key="listener_ip_input"
         )
-
-        if not srt_ip:
+        
+        # validate IP address and update UI accordingly
+        if not listener_ip:
+            st.warning("Please enter the listener's IP address")
             st.session_state.submit_disabled = True
-        elif srt_ip and not st.session_state.toolbox.validate_ipv4_address(srt_ip):
-            st.error(f"**{srt_ip}** is an invalid address")
+            srt_ip = ""
+        elif not st.session_state.toolbox.validate_ipv4_address(listener_ip):
+            st.error(f"**{listener_ip}** is not a valid IPv4 address. Please use format: xxx.xxx.xxx.xxx")
             st.session_state.submit_disabled = True
+            srt_ip = ""
+        else:
+            srt_ip = listener_ip
 
+    # SRT port selection
     srt_port = st.number_input(
         "Select port",
         min_value=9000,
@@ -227,6 +631,8 @@ with st.sidebar.container():
         format="%d",
         help="Port for the SRT session (9000-9100).",
     )
+
+    # SRT timeout selection
     srt_timeout = st.number_input(
         "Select timeout",
         min_value=30,
@@ -240,6 +646,7 @@ with st.sidebar.container():
         """,
     )
 
+    # network emulation selection
     if netem := st.checkbox("Add network emulation"):
         delay = st.number_input(
             "Add Delay (ms)",
@@ -253,10 +660,12 @@ with st.sidebar.container():
             """,
         )
 
+    # submit button
     submitted = st.button(
         "Submit", disabled=st.session_state.submit_disabled, key="srt_submitted"
     )
 
+# handle submitted session
 if st.session_state.srt_submitted:
     # clear out any pre-existing network emulation settings
     srt_manager.clear_network_emulation(selected_interface_name)
@@ -274,6 +683,7 @@ if st.session_state.srt_submitted:
         delay=delay if netem else None,
     )
 
+# main code for displaying tabs and their content
 if not os.path.exists(_SRT_STATS):
     st.warning("Awaiting SRT session to begin...")
 elif os.stat(_SRT_STATS).st_size == 0:
@@ -281,331 +691,38 @@ elif os.stat(_SRT_STATS).st_size == 0:
     st.error("SRT session statistics file is empty.")
 else:
     try:
-        output = pd.read_csv(_SRT_STATS)
+        # load and process statistics
+        output = load_and_process_statistics(_SRT_STATS)
+        if output is None:
+            st.stop()
+            
+        # create the tabs
+        session, transport_stream, raw_data = st.tabs(
+            ["Session", "Transport Stream", "Raw Session Data"]
+        )
 
-        # calculate the jitter by taking the absolute differences between consecutive msRTT values
-        output["jitter"] = output["msRTT"].diff().abs()
+        # session tab content
+        with session:
+            # display key metrics at the top
+            display_session_metrics(output)
+
+            
+            # display detailed metrics in expandable sections
+            display_rtt_jitter_metrics(output)
+            display_bandwidth_metrics(output)
+            display_buffer_metrics(output)
+            display_packet_metrics(output)
+
+        # transport stream tab content
+        with transport_stream:
+            # get the SRT process manager
+            # srt_manager = _get_srt_process_manager(st.session_state.logger)
+            display_transport_stream_data(srt_manager)
+
+        # raw data tab content
+        with raw_data:
+            display_raw_data(output)
 
     except Exception as e:
-        st.error(f"Error loading statistics file: {e}")
-        st.stop()
-
-    # Create the tabs
-    session, transport_stream, raw_data = st.tabs(
-        ["Session", "Transport Stream", "Raw Session Data"]
-    )
-
-    # session tab content
-    with session:
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Session Time", f"{output['Time'].iloc[-1] / 1000:.1f}s")
-        col2.metric(
-            "Average Receive Rate",
-            f"{output['mbpsRecvRate'].mean():.2f}Mbps",
-        )
-        col3.metric("Average Round-Trip Time", f"{output['msRTT'].mean():.2f}ms")
-        col4.metric("Average Jitter", f"{output['jitter'].mean():.2f}ms")
-        col5.metric(
-            "Pkts Rcvd/Lost/Dropped/Retrans",
-            f"{output['pktRecv'].iloc[-1]}/\
-            {output['pktRcvLoss'].iloc[-1]}/\
-            {output['pktRcvDrop'].iloc[-1]}/\
-            {output['pktRcvRetrans'].iloc[-1]}",
-        )
-
-        # round-trip time/jitter
-        with st.expander("Round-Trip Time (RTT) & Jitter"):
-            st.write(
-                """
-                ```Round-Trip Time``` and ```Jitter``` are key metrics for performance in an SRT 
-                session, revealing any periods of high delay or instability that could affect the 
-                quality of service. These metrics provide critical insights into network performance, 
-                but they represent different aspects of the connection.
-
-                _**Direct Correlation:**_ In many cases, an increase in ```Round-Trip Time``` might 
-                lead to an increase in ```Jitter```, as network congestion or instability can affect 
-                both. However, this is not always the case. It is possible to have a high 
-                ```Round-Trip Time``` with relatively low ```Jitter```, meaning that the delay is 
-                consistent. Similarly, low ```Round-Trip Time``` with high ```Jitter``` indicates 
-                rapid fluctuations in network performance.
-
-                _**Importance in Performance:**_ While ```Round-Trip Time``` is important for determining 
-                the overall speed of a connection, ```Jitter``` is crucial for assessing the stability of 
-                that connection. Real-time applications can often tolerate higher ```Round-Trip Time``` 
-                if the ```Jitter``` remains low, ensuring smooth packet delivery.
-                """
-            )
-
-            rtt_jitter_data = output.copy()
-            rtt_jitter_data = rtt_jitter_data.dropna(
-                subset=["Timepoint", "msRTT", "jitter"]
-            )
-
-            rtt_jitter_data = rtt_jitter_data.melt(
-                id_vars=["Timepoint"],
-                value_vars=["msRTT", "jitter"],
-                var_name="Metric",
-                value_name="Value",
-            )
-
-            rtt_jitter_data["Metric"] = rtt_jitter_data["Metric"].map(
-                {
-                    "msRTT": "Round-Trip Time (RTT)",
-                    "jitter": "Jitter",
-                }
-            )
-
-            st.session_state.toolbox.draw_plotly_line_chart(
-                rtt_jitter_data,
-                x="Timepoint",
-                y="Value",
-                title="Round-Trip Time (RTT) and Jitter over Time",
-                color="Metric",
-                labels={
-                    "Timepoint": "Time (s)",
-                    "Value": "Milliseconds (ms)",
-                    "Metric": "",
-                },
-            )
-
-        # available bandwidth/receive rate
-        with st.expander("Available Bandwidth & Receive Rate"):
-            st.write(
-                """
-                The ```Available Bandwidth``` indicates the maximum potential data transfer
-                rate that the network can support, while the ```Receive Rate``` shows the actual
-                rate at which data is being received.
-
-                _**Comparison of Capacity and Usage:**_ The ```Available Bandwidth``` value sets
-                the upper limit of what the network can handle, while the ```Receive Rate```
-                shows the actual usage of that capacity.
-
-                _**Performance Monitoring:**_ If the ```Receive Rate``` is consistently close to
-                the ```Available Bandwidth```, it suggests that the network is being fully utilized,
-                and there may be a risk of congestion or data loss if the demand increases further.
-                Conversely, if the ```Receive Rate``` is significantly lower than the
-                ```Available Bandwidth```, it might indicate underutilization of the network resources.
-                """
-            )
-
-            capacity_data = output.copy()
-            capacity_data = capacity_data.dropna(
-                subset=["Timepoint", "mbpsBandwidth", "mbpsRecvRate"]
-            )
-
-            capacity_data = capacity_data.melt(
-                id_vars=["Timepoint"],
-                value_vars=["mbpsBandwidth", "mbpsRecvRate"],
-                var_name="Metric",
-                value_name="Value",
-            )
-
-            capacity_data["Metric"] = capacity_data["Metric"].map(
-                {
-                    "mbpsBandwidth": "Available Bandwidth",
-                    "mbpsRecvRate": "Receive Rate",
-                }
-            )
-
-            st.session_state.toolbox.draw_plotly_line_chart(
-                capacity_data,
-                x="Timepoint",
-                y="Value",
-                title="Receive Rate and Available Bandwidth over Time",
-                color="Metric",
-                labels={"Timepoint": "Time (s)", "Value": "Mbps", "Metric": ""},
-            )
-
-        # available receive buffer/receive buffer
-        with st.expander("Available Receive Buffer & Receive Buffer"):
-            st.write(
-                """
-                The ```Available Receive Buffer``` represents how much of the
-                buffer's capacity remains available in terms of bytes, while the
-                ```Receive Buffer``` provides context on the total
-                buffer capacity in terms of time. Together, these metrics help in managing
-                and optimizing buffer usage.
-
-                _**Indications:**_ A consistently high ```Available Receive Buffer``` value
-                suggests that the buffer has plenty of available space, indicating efficient
-                processing of incoming data, while ```Receive Buffer``` provides the
-                understanding of how the buffer capacity in terms of time varies, which is useful
-                for assessing the temporal aspects of buffering and processing delays.
-                """
-            )
-            buffer_data = output.copy()
-            buffer_data = buffer_data.dropna(
-                subset=["Timepoint", "byteAvailRcvBuf", "msRcvBuf"]
-            )
-            buffer_chart = px.line(
-                buffer_data,
-                x="Timepoint",
-                y="msRcvBuf",
-                template="seaborn",
-                title="Available Receive Buffer and Receive Buffer over Time",
-                labels={
-                    "Timepoint": "Time (s)",
-                    "msRcvBuf": "Receive Buffer (ms)",
-                },
-            )
-            buffer_chart.data[0].name = "Receive Buffer (ms)"
-            buffer_chart.data[0].showlegend = True
-
-            # Add byteAvailRcvBuf to the chart
-            buffer_chart.add_scatter(
-                x=buffer_data["Timepoint"],
-                y=buffer_data["byteAvailRcvBuf"],
-                mode="lines",
-                name="Available Receive Buffer (Bytes)",
-                yaxis="y2",
-                showlegend=True,
-            )
-
-            # Customize layout to include a secondary y-axis
-            buffer_chart.update_layout(
-                yaxis=dict(
-                    title="Receive Buffer (ms)",
-                    tickfont=dict(color="#1f77b4"),
-                ),
-                yaxis2=dict(
-                    title="Available Receive Buffer (Bytes)",
-                    tickfont=dict(color="#ff7f0e"),
-                    anchor="x",
-                    overlaying="y",
-                    side="right",
-                ),
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.02,
-                    xanchor="right",
-                    x=1,
-                ),
-            )
-
-            st.plotly_chart(
-                buffer_chart,
-                config={"displaylogo": False},
-                use_container_width=True,
-            )
-
-        # packet stats
-        with st.expander("Packets Received, Lost, Dropped, Retransmitted"):
-            st.write(
-                """
-                The ```Packets Received``` indicates the total number of packets successfully
-                received by the receiver, the ```Received Packets Lost``` indicates the total
-                number of packets that were expected but never received by the receiver, the
-                ```Received Packets Dropped``` shows the number of packets that were received
-                by the receiver but subsequently discarded, and the ```Received Packets Retransmitted```
-                represents the number of packets that were retransmitted and subsequently
-                received by the receiver.
-                """
-            )
-            packet_data = output.copy()
-            packet_data = packet_data.dropna(
-                subset=[
-                    "Timepoint",
-                    "pktRecv",
-                    "pktRcvLoss",
-                    "pktRcvDrop",
-                    "pktRcvRetrans",
-                ]
-            )
-
-            packet_data = packet_data.melt(
-                id_vars=["Timepoint"],
-                value_vars=[
-                    "pktRecv",
-                    "pktRcvLoss",
-                    "pktRcvDrop",
-                    "pktRcvRetrans",
-                ],
-                var_name="Metric",
-                value_name="Value",
-            )
-
-            packet_data["Metric"] = packet_data["Metric"].map(
-                {
-                    "pktRecv": "Packets Received",
-                    "pktRcvLoss": "Received Packets Lost",
-                    "pktRcvDrop": "Received Packets Dropped",
-                    "pktRcvRetrans": "Received Packets Retransmitted",
-                }
-            )
-
-            st.session_state.toolbox.draw_plotly_line_chart(
-                packet_data,
-                x="Timepoint",
-                y="Value",
-                color="Metric",
-                title="Packets Received, Lost, Dropped, & Retransmitted over Time",
-                labels={
-                    "Timepoint": "Time (s)",
-                    "Value": "Packets",
-                    "Metric": "",
-                },
-            )
-
-    # transport stream tab content
-    with transport_stream:
-        if srt_manager.check_for_valid_mpeg_ts():
-            programs = srt_manager.show_mpeg_ts_programs()
-
-            # programs dataframe
-            programs_df = pd.json_normalize(programs["programs"]).drop(
-                columns=["tags.service_provider", "streams"]
-            )
-
-            st.dataframe(programs_df, hide_index=True, use_container_width=True)
-
-            # streams dataframe
-            streams_data = []
-            for program in programs["programs"]:
-                streams_data.extend(program["streams"])
-
-            # base columns
-            base_columns = [
-                "index",
-                "codec_name",
-                "codec_long_name",
-                "profile",
-                "codec_type",
-                "width",
-                "height",
-                "display_aspect_ratio",
-                "field_order",
-                "start_time",
-                "duration",
-                "bit_rate",
-                "tags.language",
-            ]
-
-            # extract only the columns that exist in the data
-            present_columns = [
-                col
-                for col in base_columns
-                if col in pd.json_normalize(streams_data, errors="ignore").columns
-            ]
-
-            # normalize the JSON and select only existing columns
-            streams_df = pd.json_normalize(streams_data, errors="ignore")[
-                present_columns
-            ]
-
-            st.dataframe(streams_df, hide_index=True, use_container_width=True)
-
-            # download content
-            with open("srt/received.ts", "rb") as file:
-                st.download_button(
-                    label="Download MPEG-TS",
-                    data=file,
-                    file_name="received.ts",
-                )
-
-        else:
-            st.error("No valid MPEG-TS detected")
-
-    # raw data tab content
-    with raw_data:
-        st.dataframe(output, use_container_width=True, hide_index=True)
+        st.session_state.logger.error(f"Error displaying SRT statistics: {str(e)}")
+        st.error(f"Error displaying SRT statistics: {str(e)}")
