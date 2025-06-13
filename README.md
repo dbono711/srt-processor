@@ -38,11 +38,7 @@ To build the Docker image locally from the Dockerfile included in this repositor
 3. Run the Docker container with port forwarding (adjust accordingly for mapping to available ports on your host). Note that the ```--cap-add=NET_ADMIN``` argument is required in order to utilize the network emulation options.
 
     ```shell
-    docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp --cap-add=NET_ADMIN --name srt-processor-dev srt-processor:latest
-    ```
-
-    ```shell
-    docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp -v $(pwd):/app --cap-add=NET_ADMIN --name srt-processor-dev srt-processor:latest
+    docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp --cap-add=NET_ADMIN --name srt-processor srt-processor:latest
     ```
 
 ## Pulling the Docker Image from Docker Hub
@@ -58,7 +54,7 @@ Alternatively, you can pull the pre-built Docker image from Docker Hub:
 2. Run the Docker container with port forwarding (adjust accordingly for mapping to available ports on your host). Note that the ```--cap-add=NET_ADMIN``` argument is required in order to utilize the network emulation options.
 
     ```shell
-    docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp --name srt-processor --cap-add=NET_ADMIN dbono711/srt-processor:latest
+    docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp --cap-add=NET_ADMIN --name srt-processor dbono711/srt-processor:latest
     ```
 
 ## Accessing the Application
@@ -86,6 +82,8 @@ You can use FFmpeg to stream media to the SRT Processor application when it's co
     ```
 
     Replace `<container-ip>` with the IP address of your SRT Processor container, and adjust the input file path as needed.
+
+    Assumes a file named ```sample_1280x720_surfing_with_audio.mp4``` is present in the current directory. Replace with your own file path as needed.
 
 3. Command breakdown:
    - `-stats`: Shows encoding progress statistics
