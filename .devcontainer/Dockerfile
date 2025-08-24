@@ -10,6 +10,8 @@ RUN pip install --upgrade pip
 # Update the package list and install necessary packages
 RUN apt-get update && apt-get install -y \
     git \
+    curl \
+    wget \
     tshark \
     ffmpeg \
     libssl-dev \
@@ -47,14 +49,17 @@ RUN for version in ${SRT_VERSIONS}; do \
 # Change the working directory to /app
 WORKDIR /app
 
-# Copy the Docker development requirements into the container's /app directory
-COPY docker_dev_requirements.txt .
+# Copy the entire workspace into the container
+COPY . .
 
-# Install the Python dependencies listed in docker_requirements.txt in the root user's local directory
-RUN pip install --user -r docker_dev_requirements.txt
+# Install the Python dependencies listed in docker_dev_requirements.txt in the root user's local directory
+RUN pip install --user -r .devcontainer/docker_dev_requirements.txt
 
 # Expose TCP port 8501 for the Streamlit application
 EXPOSE 8501/tcp
 
 # Expose UDP ports 9000-9100 for the SRT sessions
 EXPOSE 9000-9100/udp
+
+# Set the default command to run Streamlit
+CMD ["streamlit", "run", "Home.py", "--server.port=8501", "--server.address=0.0.0.0"]
