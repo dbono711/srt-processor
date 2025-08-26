@@ -1,63 +1,97 @@
-# Use the official slim Python image as the base image
-FROM python:3.11-slim
+# Multi-stage build for optimized SRT Processor image
 
-# Set the PATH environment variable to include the root user's local binary directory
-ENV PATH="/root/.local/bin:${PATH}"
+# ============================================================================
+# Build Stage: Compile SRT tools and dependencies
+# ============================================================================
+FROM python:3.11-slim AS builder
 
-# Upgrade pip to the latest version
-RUN pip install --upgrade pip
-
-# Update the package list and install necessary packages
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
     git \
-    tshark \
-    ffmpeg \
-    libssl-dev \
+    curl \
+    wget \
     cmake \
     build-essential \
-    iproute2 \
-    && rm -rf /var/lib/apt/lists/* # Clean up the package lists to reduce image size
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Clone the lib-tcpdump-processing repository
+# Pin specific commits for reproducible builds
+ARG LIBTCPDUMP_COMMIT=master
+ARG SRT_COMMIT=master
+
+# Clone and build lib-tcpdump-processing
 RUN git clone https://github.com/mbakholdina/lib-tcpdump-processing.git /opt/libtcpdump
-
-# Change the working directory to the cloned repository
 WORKDIR /opt/libtcpdump
-
-# Install the Python package in the root user's local directory
+RUN git checkout ${LIBTCPDUMP_COMMIT}
 RUN pip install --user .
 
-# Clone the SRT repository
-RUN git clone https://github.com/Haivision/srt.git /opt/srt
+# Install Python dependencies that require compilation
+COPY docker_requirements.txt /tmp/
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --user -r /tmp/docker_requirements.txt
 
-# Define the SRT versions to build
+# Clone and build SRT tools
+RUN git clone https://github.com/Haivision/srt.git /opt/srt
+WORKDIR /opt/srt
+
+# Define SRT versions to build
 ARG SRT_VERSIONS="v1.4.4 v1.5.0 v1.5.3"
 
-# Loop through each version, checkout, build in a version-specific 'build' directory, and create symbolic link
+# Build SRT versions with parallel compilation
 RUN for version in ${SRT_VERSIONS}; do \
-    cd /opt/srt && \
     git checkout $version && \
     mkdir -p build_$version && \
     cd build_$version && \
     cmake .. && \
-    make && \
-    ln -s /opt/srt/build_$version/srt-live-transmit /root/.local/bin/srt-live-transmit-$version; \
+    make -j$(nproc) && \
+    cd .. ; \
     done
 
-# Change the working directory to /app
+# Create a dedicated directory for SRT binaries
+RUN mkdir -p /opt/srt-binaries
+RUN for version in ${SRT_VERSIONS}; do \
+    cp /opt/srt/build_$version/srt-live-transmit /opt/srt-binaries/srt-live-transmit-$version; \
+    done
+
+# ============================================================================
+# Runtime Stage: Minimal production image
+# ============================================================================
+FROM python:3.11-slim AS runtime
+
+# Create non-root user for security
+RUN groupadd -r srtuser && useradd -r -g srtuser srtuser
+
+# Install only runtime dependencies
+RUN apt-get update && apt-get install -y \
+    tshark \
+    ffmpeg \
+    iproute2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up directories and permissions
 WORKDIR /app
+RUN chown srtuser:srtuser /app
 
-# Copy the current directory contents into the container's /app directory
-COPY . .
+# Copy SRT binaries from builder stage
+COPY --from=builder /opt/srt-binaries/* /usr/local/bin/
+RUN chmod +x /usr/local/bin/srt-live-transmit-*
 
-# Install the Python dependencies listed in docker_requirements.txt in the root user's local directory
-RUN pip install --user -r docker_requirements.txt
+# Copy Python packages from builder stage
+COPY --from=builder /root/.local /home/srtuser/.local
+RUN chown -R srtuser:srtuser /home/srtuser/.local
 
-# Expose TCP port 8501 for the Streamlit application
+# Set PATH for non-root user
+ENV PATH="/home/srtuser/.local/bin:${PATH}"
+
+# Copy application code
+COPY --chown=srtuser:srtuser . .
+
+# Switch to non-root user
+USER srtuser
+
+# Expose ports
 EXPOSE 8501/tcp
-
-# Expose UDP ports 9000-9100 for the SRT sessions
 EXPOSE 9000-9100/udp
 
-# Define the command to run the Streamlit application
-CMD streamlit run Home.py
+# Run Streamlit application
+CMD ["streamlit", "run", "Home.py", "--server.address=0.0.0.0", "--server.port=8501"]

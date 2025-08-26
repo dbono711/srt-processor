@@ -2,7 +2,7 @@ import os
 import time
 import netifaces
 import pandas as pd
-import plotly_express as px
+import plotly.express as px
 import streamlit as st
 from typing import Any, List, Optional, Tuple
 from process_manager import SrtProcessManager
@@ -559,8 +559,8 @@ st.markdown(
     from a session handshake perspective, but will always be the receiver from a 
     session flow perspective.
 
-    _**NOTE:** The last session's statistics will be displayed until a new 
-    one is initiated. In other words, every new session overwrites the last._
+    _**NOTE:** The most recent session's statistics will be displayed until a new 
+    one is initiated._
     """
 )
 
