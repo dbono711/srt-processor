@@ -4,52 +4,104 @@ name: Build and Push Docker Image to Docker Hub
 on:
   push:
     branches: [ "main" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main" ]
 
 env:
+  REGISTRY: docker.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build_and_test:
+  build_and_push:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - name: Check out the repo
-        uses: actions/checkout@v4
-
-      - name: Build the Docker image
-        run: docker build --tag ${{ env.IMAGE_NAME }}:latest --file Dockerfile . --no-cache
-      
-      - name: Test the Docker image
-        run: docker run -d -p 8501:8501 --name srt-processor ${{ env.IMAGE_NAME }}:latest
-
-  push_to_registry:
-    name: Push Docker image to Docker Hub
-    runs-on: ubuntu-latest
-    needs: build_and_test
-    steps:
-      - name: Check out the repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:master
+            network=host
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=SRT Processor
+            org.opencontainers.image.description=Interactive Streamlit application for analyzing SRT session statistics
+            org.opencontainers.image.vendor=dbono711
+            org.opencontainers.image.licenses=MIT
 
       - name: Login to Docker Hub
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
+          registry: ${{ env.REGISTRY }}
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ env.IMAGE_NAME }}:main, ${{ env.IMAGE_NAME }}:latest
-  
-      - name: Docker Hub Description
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILDTIME=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            VERSION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
+            REVISION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.revision'] }}
+
+      - name: Test Docker image
+        if: github.event_name != 'pull_request'
+        run: |
+          # Start container in background
+          docker run -d -p 8501:8501 --name srt-processor-test ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          
+          # Wait for container to be ready
+          echo "Waiting for container to start..."
+          sleep 15
+          
+          # Test health endpoint
+          echo "Testing application health..."
+          curl -f http://localhost:8501/_stcore/health || exit 1
+          
+          # Test main page loads
+          echo "Testing main page..."
+          curl -f http://localhost:8501 || exit 1
+          
+          # Cleanup
+          docker stop srt-processor-test
+          docker rm srt-processor-test
+          
+          echo "✅ Docker image tests passed"
+
+      - name: Update Docker Hub description
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-          repository: dbono711/srt-processor
-          short-description: "Streamlit application for processing SRT session statistics"
+          repository: ${{ env.IMAGE_NAME }}
+          short-description: "Interactive Streamlit application for analyzing SRT session statistics"
+          readme-filepath: ./README.md
