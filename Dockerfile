@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
     cmake \
     build-essential \
     libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get autoremove -y && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Pin specific commits for reproducible builds
 ARG LIBTCPDUMP_COMMIT=master
@@ -66,7 +66,11 @@ RUN apt-get update && apt-get install -y \
     tshark \
     ffmpeg \
     iproute2 \
-    && rm -rf /var/lib/apt/lists/*
+    sudo \
+    && apt-get autoremove -y && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Allow srtuser to run tc command without password
+RUN echo "srtuser ALL=(root) NOPASSWD: /usr/sbin/tc" >> /etc/sudoers
 
 # Set up directories and permissions
 WORKDIR /app

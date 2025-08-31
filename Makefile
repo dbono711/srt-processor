@@ -8,7 +8,7 @@ dev:
 
 # Build production image
 build:
-	docker build -t srt-processor .
+	docker build -t srt-processor:latest .
 
 # Run production container
 run:

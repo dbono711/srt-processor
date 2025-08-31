@@ -133,6 +133,17 @@ class SrtProcessManager(ProcessManager):
         Returns:
             None
         """
+
+        # Build SRT live transmit command with comprehensive statistics and logging
+        # -fullstats: Enable full SRT statistics collection (all available metrics)
+        # -statspf:csv: Output statistics in CSV format for easy parsing
+        # -stats-report-frequency:100: Collect statistics every 100 packets for granular monitoring
+        # -statsout: Write statistics to file instead of stdout
+        # -loglevel:info: Set logging level to info for detailed connection information
+        # -logfile: Write SRT logs to separate file for debugging
+        # -to: Set timeout in seconds for connection/activity
+        # srt://ip:port?mode=: SRT URI with connection mode (listener/caller)
+        # file://con: Output received stream to stdout, redirected to file
         command = (
             f"srt-live-transmit-v{version} -fullstats -statspf:csv -stats-report-frequency:100 "
             f"-statsout:srt/received.ts.stats -loglevel:info -logfile:srt/received.ts.log "
@@ -295,6 +306,7 @@ class SrtProcessManager(ProcessManager):
         try:
             subprocess.run(
                 [
+                    "sudo",
                     "tc",
                     "qdisc",
                     "add",
@@ -308,9 +320,13 @@ class SrtProcessManager(ProcessManager):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                check=True
             )
+            self.logger.info(f"Network emulation added: {delay}ms delay on {intf}")
         except subprocess.CalledProcessError as e:
-            self.logger.info(f"An error occurred while enabling network emulation: {e}")
+            self.logger.error(f"Network emulation failed: {e.stderr}")
+        except FileNotFoundError:
+            self.logger.error("tc or sudo command not found")
 
     def clear_network_emulation(self, intf: str) -> None:
         """
@@ -327,10 +343,14 @@ class SrtProcessManager(ProcessManager):
         """
         try:
             subprocess.run(
-                ["tc", "qdisc", "del", "dev", f"{intf}", "root", "netem"],
+                ["sudo", "tc", "qdisc", "del", "dev", f"{intf}", "root", "netem"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                check=True
             )
+            self.logger.info(f"Network emulation removed from {intf}")
         except subprocess.CalledProcessError as e:
-            self.logger.info(f"An error occurred while removing network emulation: {e}")
+            self.logger.error(f"Failed to remove network emulation: {e.stderr}")
+        except FileNotFoundError:
+            self.logger.error("tc or sudo command not found")
