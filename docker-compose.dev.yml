@@ -1,0 +1,17 @@
+services:
+  srt-processor-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+      - "9000-9100:9000-9100/udp"
+    volumes:
+      # Mount source code for hot reload
+      - .:/app
+      # Preserve Python cache
+      - /app/__pycache__
+    cap_add:
+      - NET_ADMIN
+    stdin_open: true
+    tty: true

@@ -1,10 +1,9 @@
 import socket
-from ipaddress import ip_address
-from typing import Dict
-
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from ipaddress import ip_address
+from typing import Dict
 from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 

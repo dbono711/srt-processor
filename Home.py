@@ -6,7 +6,6 @@ from toolbox import Toolbox
 st.set_page_config(page_title="SRT Processor", layout="wide")
 st.title("SRT Processor")
 st.subheader("Interactive application for exploring SRT session statistics")
-
 st.session_state.toolbox = Toolbox()
 st.session_state.logger = LoggerFactory.get_logger("app", log_level="WARNING")
 
@@ -49,7 +48,7 @@ with faq:
             attributes make SRT highly valuable for live broadcasts, remote production, 
             and cloud-based workflows.
             
-            Within the DVB value chain, SRT plays a key role in both content contribution 
+            Within the media value chain, SRT plays a key role in both content contribution 
             and distribution, allowing broadcasters to move video from field locations 
             to broadcast centers or cloud platforms with reliability and low latency. 
             Its open-source nature and ability to integrate into IP-based workflows position 
