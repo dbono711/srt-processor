@@ -2,14 +2,14 @@
 
 ## Overview
 
-Interactive platform designed to serve as both a learning environment and a troubleshooting tool for analyzing Secure Reliable Transport (SRT) flows, enabling users to explore the intricacies of SRT, offering hands-on experience with live data and captured session files.
+Interactive platform designed to serve as both a learning environment and a troubleshooting tool for analyzing Secure Reliable Transport (SRT) flows, enabling users to explore the intricacies of SRT through live streaming sessions.
 
-The application allows users to either upload Packet Capture (PCAP/PCAPNG) files containing SRT session data or initiate live SRT streams for real-time analysis. Through a combination of open-source tools and custom processing libraries, ```srt-processor``` provides a comprehensive view of SRT statistics, offering invaluable insights for network engineers, developers, and anyone interested in mastering SRT protocols.
+The application allows users to initiate live SRT streams for real-time analysis. Through a combination of open-source tools and custom processing libraries, ```srt-processor``` provides a comprehensive view of SRT statistics, offering invaluable insights for network engineers, developers, and anyone interested in learning SRT.
 
 ## Prerequisites
 
 - Docker installed on your local machine
-- Git installed on your local machine (only required if [building locally](#building-the-docker-image-locally) or [development](#setting-up-development-environment-with-vs-code-development-containers))
+- Git installed on your local machine (only required if [building locally](#building-the-docker-image-locally) or [development](#development))
 
 ## Container Ports
 

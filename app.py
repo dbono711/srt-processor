@@ -1,13 +1,16 @@
+import netifaces
 import os
 import time
-import netifaces
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from typing import Any, List, Optional, Tuple
-from process_manager import SrtProcessManager
 
-_SRT_STATS = "./srt/received.ts.stats"
+from loggerfactory import LoggerFactory
+from process_manager import SrtProcessManager
+from toolbox import Toolbox
+from typing import Any, List, Optional, Tuple
+
 
 @st.cache_resource
 def _get_srt_process_manager(_logger) -> SrtProcessManager:
@@ -51,7 +54,6 @@ def _get_interfaces_with_ip() -> List[Tuple[str, str]]:
 def _handle_timeout(
     srt_manager: Any,
     srt_timeout: int,
-    selected_interface_name: str,
     counter: Any,
     connected: Any,
 ) -> None:
@@ -68,7 +70,6 @@ def _handle_timeout(
                            for checking connection status and handling network
                            emulation.
         srt_timeout (int): The duration in seconds before the SRT session times out.
-        selected_interface_name (str): The name of the network interface being used.
         counter (Any): A UI element or logger for displaying the remaining time.
         connected (Any): A UI element or logger for displaying the connection status.
 
@@ -92,7 +93,7 @@ def _handle_timeout(
             connected.info(f"Connected with ```{connected_host}```")
 
     # timeout completes naturally
-    st.session_state.logger.info("SRT processes timed out...Cleaning up.")
+    logger.info("SRT processes timed out...Cleaning up.")
     srt_manager.connection_established = False
     st.rerun()
 
@@ -133,11 +134,11 @@ def _start_srt_session(
     """
     
     # clear out any pre-existing network emulation settings
-    st.session_state.logger.info(f"Clearing any pre-existing network emulation for interface {selected_interface_name}")
+    logger.info(f"Clearing any pre-existing network emulation for interface {selected_interface_name}")
     srt_manager.clear_network_emulation(selected_interface_name)
 
     if netem:
-        st.session_state.logger.info(f"Adding networking emulation for interface {selected_interface_name} with {delay}ms delay")
+        logger.info(f"Adding networking emulation for interface {selected_interface_name} with {delay}ms delay")
         srt_manager.add_network_emulation(selected_interface_name, delay)
 
     srt_manager.start_process(
@@ -151,9 +152,7 @@ def _start_srt_session(
     counter = st.empty()
     connected = st.empty()
 
-    _handle_timeout(
-        srt_manager, srt_timeout, selected_interface_name, counter, connected
-    )
+    _handle_timeout(srt_manager, srt_timeout, counter, connected)
 
 
 def _read_data(stats_file: str) -> pd.DataFrame | None:
@@ -175,7 +174,7 @@ def _read_data(stats_file: str) -> pd.DataFrame | None:
         return data
     except Exception as e:
         st.error(f"Error loading statistics file: {e}")
-        st.session_state.logger.error(f"Failed to load statistics: {e}")
+        logger.error(f"Failed to load statistics: {e}")
         return None
 
 
@@ -189,18 +188,34 @@ def _display_session_metrics(data: pd.DataFrame) -> None:
         None
     """
     # Create rows of columns
-    row1_col1, row1_col2, row1_col3, row1_col4, = st.columns(4)
-    row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
+    row1_col1, row1_col2, row1_col3, row1_col4, row1_col5 = st.columns(5)
     
     # Display metrics
-    row1_col1.metric("Session Time", f"{data['Time'].iloc[-1] / 1000:.1f}s")
-    row1_col2.metric("Average Receive Rate", f"{data['mbpsRecvRate'].mean():.2f}Mbps")
-    row1_col3.metric("Average Round-Trip Time", f"{data['msRTT'].mean():.2f}ms")
-    row1_col4.metric("Average Jitter", f"{data['jitter'].mean():.2f}ms")
-    row2_col1.metric("Packets Received", f"{data['pktRecv'].iloc[-1]}")
-    row2_col2.metric("Packets Lost", f"{data['pktRcvLoss'].iloc[-1]}")
-    row2_col3.metric("Packets Dropped", f"{data['pktRcvDrop'].iloc[-1]}")
-    row2_col4.metric("Packets Retransmitted", f"{data['pktRcvRetrans'].iloc[-1]}")
+    row1_col1.metric(
+        "Session Time",
+        f"{data['Time'].iloc[-1] / 1000:.1f}s",
+        help="Session time in seconds"
+    )
+    row1_col2.metric(
+        "Average Receive Rate",
+        f"{data['mbpsRecvRate'].mean():.2f}Mbps",
+        help="Average receive rate in Mbps"
+    )
+    row1_col3.metric(
+        "Average Round-Trip Time",
+        f"{data['msRTT'].mean():.2f}ms",
+        help="Average round-trip time in ms"
+    )
+    row1_col4.metric(
+        "Average Jitter",
+        f"{data['jitter'].mean():.2f}ms",
+        help="Average jitter in ms"
+    )
+    row1_col5.metric(
+        "Packets",
+        f"{data['pktRecv'].iloc[-1]}/{data['pktRcvLoss'].iloc[-1]}/{data['pktRcvDrop'].iloc[-1]}/{data['pktRcvRetrans'].iloc[-1]}",
+        help="Received/Lost/Dropped/Retransmitted"
+    )
 
 
 def _display_rtt_jitter_metrics(data: pd.DataFrame) -> None:
@@ -231,12 +246,16 @@ def _display_rtt_jitter_metrics(data: pd.DataFrame) -> None:
             """
         )
 
-        # Prepare data for visualization
-        rtt_jitter_data = data.copy()
-        rtt_jitter_data = rtt_jitter_data.dropna(
-            subset=["Timepoint", "msRTT", "jitter"]
-        )
+        # Prepare data for visualization - select only needed columns first
+        # This reduces memory usage and improves processing speed
+        rtt_jitter_data = data[["Timepoint", "msRTT", "jitter"]].copy()
+        
+        # Remove rows with missing values in any of the three columns
+        # This ensures clean data for plotting without gaps or errors
+        rtt_jitter_data = rtt_jitter_data.dropna()
 
+        # Transform data from wide to long format for multi-line Plotly visualization
+        # This creates a single 'Value' column with separate rows for each metric
         rtt_jitter_data = rtt_jitter_data.melt(
             id_vars=["Timepoint"],
             value_vars=["msRTT", "jitter"],
@@ -244,6 +263,8 @@ def _display_rtt_jitter_metrics(data: pd.DataFrame) -> None:
             value_name="Value",
         )
 
+        # Map SRT technical column names to user-friendly display labels
+        # This improves chart readability and legend clarity
         rtt_jitter_data["Metric"] = rtt_jitter_data["Metric"].map(
             {
                 "msRTT": "Round-Trip Time (RTT)",
@@ -252,7 +273,7 @@ def _display_rtt_jitter_metrics(data: pd.DataFrame) -> None:
         )
 
         # Draw the chart
-        st.session_state.toolbox.draw_plotly_line_chart(
+        toolbox.draw_plotly_line_chart(
             rtt_jitter_data,
             x="Timepoint",
             y="Value",
@@ -291,14 +312,14 @@ def _display_bandwidth_metrics(data: pd.DataFrame) -> None:
             """
         )
 
-        # Prepare data for visualization
-        bandwidth_data = data.copy()
-
-        # Remove rows with missing values in critical bandwidth columns
+        # Prepare data for visualization - select only needed columns first
+        # This reduces memory usage and improves processing speed
+        bandwidth_data = data[["Timepoint", "mbpsBandwidth", "mbpsRecvRate"]].copy()
+        
+        # Remove rows with missing values in any of the three columns
         # This ensures clean data for plotting without gaps or errors
-        bandwidth_data = bandwidth_data.dropna(
-            subset=["Timepoint", "mbpsBandwidth", "mbpsRecvRate"]
-        )
+        bandwidth_data = bandwidth_data.dropna()
+
 
         # Convert bandwidth from Kbps to Mbps for consistent units with receive rate
         # mbpsBandwidth appears to be in Kbps despite the name, so divide by 1000
@@ -323,7 +344,7 @@ def _display_bandwidth_metrics(data: pd.DataFrame) -> None:
         )
 
         # Draw the chart
-        st.session_state.toolbox.draw_plotly_line_chart(
+        toolbox.draw_plotly_line_chart(
             bandwidth_data,
             x="Timepoint",
             y="Value",
@@ -355,11 +376,14 @@ def _display_buffer_metrics(data: pd.DataFrame) -> None:
             for assessing the temporal aspects of buffering and processing delays.
             """
         )
-        # Prepare data for visualization
-        buffer_data = data.copy()
-        buffer_data = buffer_data.dropna(
-            subset=["Timepoint", "byteAvailRcvBuf", "msRcvBuf"]
-        )
+
+        # Prepare data for visualization - select only needed columns first
+        # This reduces memory usage and improves processing speed
+        buffer_data = data[["Timepoint", "byteAvailRcvBuf", "msRcvBuf"]].copy()
+        
+        # Remove rows with missing values in any of the three columns
+        # This ensures clean data for plotting without gaps or errors
+        buffer_data = buffer_data.dropna()
         
         # Create the chart with dual y-axes
         buffer_chart = px.line(
@@ -422,7 +446,7 @@ def _display_packet_metrics(data: pd.DataFrame) -> None:
     Args:
         data (pd.DataFrame): The processed statistics data
     """
-    with st.expander("Packets Received, Lost, Dropped, Retransmitted"):
+    with st.expander("Packet Statistics"):
         st.write(
             """
             The ```Packets Received``` indicates the total number of packets successfully
@@ -434,20 +458,14 @@ def _display_packet_metrics(data: pd.DataFrame) -> None:
             received by the receiver.
             """
         )
-        # Prepare data for visualization
-        packet_data = data.copy()
+
+        # Prepare data for visualization - select only needed columns first
+        # This reduces memory usage and improves processing speed
+        packet_data = data[["Timepoint", "pktRecv", "pktRcvLoss", "pktRcvDrop", "pktRcvRetrans"]].copy()
         
-        # Remove rows with missing values in critical packet statistics columns
-        # This ensures clean data for plotting SRT packet metrics without gaps
-        packet_data = packet_data.dropna(
-            subset=[
-                "Timepoint",
-                "pktRecv",
-                "pktRcvLoss",
-                "pktRcvDrop",
-                "pktRcvRetrans",
-            ]
-        )
+        # Remove rows with missing values in any of the three columns
+        # This ensures clean data for plotting without gaps or errors
+        packet_data = packet_data.dropna()
 
         # Transform data from wide to long format for multi-line Plotly visualization
         # This allows plotting all packet metrics on the same chart with separate lines
@@ -475,7 +493,7 @@ def _display_packet_metrics(data: pd.DataFrame) -> None:
         )
 
         # Draw the chart
-        st.session_state.toolbox.draw_plotly_line_chart(
+        toolbox.draw_plotly_line_chart(
             packet_data,
             x="Timepoint",
             y="Value",
@@ -559,13 +577,8 @@ def _display_raw_data(data: pd.DataFrame) -> None:
     st.dataframe(data, use_container_width=True, hide_index=True)
 
 
-# check if toolbox is initialized
-if "toolbox" not in st.session_state:
-    st.switch_page("Home.py")
-
-# initialize page setup
-st.set_page_config(page_title="SRT Processor", layout="wide")
-st.title("SRT Live Transmit Analysis")
+st.set_page_config(page_title="SRT Processor", layout="wide", page_icon="📹")
+st.title("SRT Processor")
 st.markdown(
     """
     Spawn an [srt-live-transmit](https://github.com/Haivision/srt/blob/master/docs/apps/srt-live-transmit.md) 
@@ -576,8 +589,11 @@ st.markdown(
     """
 )
 
-# initialize srt manager
-srt_manager = _get_srt_process_manager(st.session_state.logger)
+_SRT_STATS = "./srt/received.ts.stats"
+
+toolbox = Toolbox()
+logger = LoggerFactory.get_logger("app", log_level="WARNING")
+srt_manager = _get_srt_process_manager(logger)
 
 # determine the state of 'submit_disabled' based on 'srt_submitted'
 st.session_state["submit_disabled"] = st.session_state.get("srt_submitted", False)
@@ -626,7 +642,7 @@ with st.sidebar.container():
             st.warning("Please enter the listener's IP address")
             st.session_state.submit_disabled = True
             srt_ip = ""
-        elif not st.session_state.toolbox.validate_ipv4_address(listener_ip):
+        elif not toolbox.validate_ipv4_address(listener_ip):
             st.error(f"**{listener_ip}** is not a valid IPv4 address. Please use format: xxx.xxx.xxx.xxx")
             st.session_state.submit_disabled = True
             srt_ip = ""
@@ -659,16 +675,26 @@ with st.sidebar.container():
     )
 
     # network emulation selection
-    if netem := st.checkbox("Add network emulation"):
+    if netem := st.checkbox(
+        "Add network emulation",
+        help="""
+        Network emulation using Linux Traffic Control (tc) artificially introduces 
+        delay to simulate real-world network conditions. When enabled, tc modifies 
+        the container's network interface to add configurable millisecond delays to 
+        incoming & outgoing packets, allowing you to test how SRT performs under 
+        various network conditions such as satellite links, congested networks, or 
+        unstable connections. This helps evaluate SRT's adaptive bitrate, retransmission, 
+        and buffering mechanisms in a controlled environment.
+        """):
         delay = st.number_input(
             "Add Delay (ms)",
-            min_value=10,
+            min_value=1,
             max_value=200,
             value=10,
-            step=5,
+            step=1,
             format="%d",
             help="""
-            Add incremental delay, in milliseconds (ms).
+            Add incremental delay, in milliseconds (ms) (1-200).
             """,
         )
 
@@ -695,10 +721,10 @@ if st.session_state.srt_submitted:
 if not os.path.exists(_SRT_STATS):
     st.warning("Awaiting SRT session to begin...")
 elif os.stat(_SRT_STATS).st_size == 0:
-    st.session_state.logger.info("SRT session statistics file is empty.")
+    logger.info("SRT session statistics file is empty.")
     st.error("SRT session statistics file is present, but is empty.")
 else:
-    st.session_state.logger.info("Displaying SRT session data...")
+    logger.info("Displaying SRT session data...")
 
     # load and process statistics
     data = _read_data(_SRT_STATS)
@@ -706,8 +732,8 @@ else:
         st.stop()
 
     # create tabs
-    session, transport_stream, raw_data = st.tabs(
-        ["Session", "Transport Stream", "Raw Session Data"]
+    session, transport_stream, raw_data, faq = st.tabs(
+        ["Session", "Transport Stream", "Raw Session Data", "FAQ"]
     )
 
     # session tab content
@@ -728,3 +754,48 @@ else:
     # raw data tab content
     with raw_data:
         _display_raw_data(data)
+    
+    # faq tab content
+    with faq:
+        with st.expander("What is this application?"):
+            st.write(
+                """
+                ```srt-processor``` is an interactive platform designed to serve as both 
+                a learning environment and a troubleshooting tool for analyzing Secure 
+                Reliable Transport (SRT) flows. This project enables users to delve deep 
+                into the statistcs generated by SRT sessions, offering insight into SRT 
+                communication.
+                """
+            )
+        with st.expander("What is SRT?"):
+            st.write(
+                """
+                Secure Reliable Transport (SRT) is an open-source protocol developed 
+                by Haivision in 2012, designed to optimize live video streaming over 
+                unpredictable IP networks, particularly the public internet. Released 
+                to the industry through the SRT Alliance in 2017, SRT has rapidly become 
+                a critical tool for industries like broadcasting, OTT streaming, and 
+                enterprise communications. Its core features include low-latency 
+                transmission, robust error correction, and end-to-end encryption, making 
+                it ideal for secure and reliable live video transport.
+                
+                SRT leverages Automatic Repeat reQuest (ARQ) and other techniques to 
+                ensure high-quality video delivery even over unreliable networks. Its 
+                focus on security through 128/256-bit AES encryption ensures that video 
+                streams are protected from unauthorized access and tampering. These 
+                attributes make SRT highly valuable for live broadcasts, remote production, 
+                and cloud-based workflows.
+                
+                Within the media value chain, SRT plays a key role in both content contribution 
+                and distribution, allowing broadcasters to move video from field locations 
+                to broadcast centers or cloud platforms with reliability and low latency. 
+                Its open-source nature and ability to integrate into IP-based workflows position 
+                SRT as a flexible and cost-effective alternative to traditional video transmission 
+                methods like satellite, and proprietary protocols such as RTMP and Zixi.
+                
+                SRT’s rapid adoption by the industry, combined with its scalability and strong 
+                performance in challenging network environments, has made it a crucial component 
+                in the evolution of digital video broadcasting, particularly as the industry 
+                shifts toward cloud-based and IP-driven infrastructures.
+                """
+            )
