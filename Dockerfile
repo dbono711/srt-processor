@@ -16,14 +16,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get autoremove -y && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Pin specific commits for reproducible builds
-ARG LIBTCPDUMP_COMMIT=master
 ARG SRT_COMMIT=master
-
-# Clone and build lib-tcpdump-processing
-RUN git clone https://github.com/mbakholdina/lib-tcpdump-processing.git /opt/libtcpdump
-WORKDIR /opt/libtcpdump
-RUN git checkout ${LIBTCPDUMP_COMMIT}
-RUN pip install --user .
 
 # Install Python dependencies that require compilation
 COPY docker_requirements.txt /tmp/
@@ -63,7 +56,6 @@ RUN groupadd -r srtuser && useradd -r -g srtuser srtuser
 
 # Install only runtime dependencies
 RUN apt-get update && apt-get install -y \
-    tshark \
     ffmpeg \
     iproute2 \
     sudo \
@@ -98,4 +90,4 @@ EXPOSE 8501/tcp
 EXPOSE 9000-9100/udp
 
 # Run Streamlit application
-CMD ["streamlit", "run", "Home.py", "--server.address=0.0.0.0", "--server.port=8501"]
+CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]

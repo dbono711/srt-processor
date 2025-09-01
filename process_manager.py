@@ -4,7 +4,6 @@ import re
 import subprocess
 import threading
 import time
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 
@@ -43,67 +42,6 @@ class ProcessManager:
         if self.process and self.check_if_running():
             self.process.terminate()
             self.logger.info("Process terminated.")
-
-
-class LibTcpDumpManager(ProcessManager):
-    def __init__(self, logger) -> None:
-        """
-        Initialize the LibTcpDumpManager with a logger.
-
-        Args:
-            logger (logging.Logger): Logger instance for logging process events.
-        """
-        super().__init__(logger)
-        self.results_path = "./pcaps/result.processed"
-
-    def start_process(self, file: Path) -> None:
-        """
-        Start the tcpdump processing using the specified file.
-
-        Args:
-            file (Path): The file to be processed.
-
-        Returns:
-            None
-        """
-        command = f"get-traffic-stats --overwrite --side rcv pcaps/{file.name}"
-        self.logger.info(f"Starting process with '{command}'")
-        self.process = subprocess.Popen(
-            command,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        threading.Thread(target=self.redirect_output_to_file).start()
-
-    def get_output(self) -> str:
-        """
-        Retrieve the output from the processed results file, trimming the first two lines.
-
-        Returns:
-            str: The processed and trimmed output from the results file.
-        """
-        with open(self.results_path, "r") as results:
-            result_lines = results.readlines()
-            trimmed_results = "".join(result_lines[2:])
-
-        return trimmed_results
-
-    def redirect_output_to_file(self) -> None:
-        """
-        Redirect the stdout of the subprocess to a specified results file.
-
-        This method continuously reads lines from the process's stdout and writes them to the results file.
-
-        Returns:
-            None
-        """
-        with open(self.results_path, "w") as results:
-            if self.process:
-                for line in iter(self.process.stdout.readline, ""):
-                    results.write(line)
-                self.process.stdout.close()
 
 
 class SrtProcessManager(ProcessManager):

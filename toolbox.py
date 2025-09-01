@@ -4,12 +4,11 @@ import plotly.express as px
 import streamlit as st
 from ipaddress import ip_address
 from typing import Dict
-from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 
 class Toolbox:
-    """A utility class for performing various tasks such as plotting charts,
-    validating files, and handling network operations."""
+    """A utility class for performing various tasks such as plotting charts
+    and handling network operations."""
 
     def __init__(self):
         """Initialize the Toolbox class."""
@@ -50,36 +49,6 @@ class Toolbox:
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         st.plotly_chart(chart, config={"displaylogo": False}, use_container_width=True)
-
-    def validate_pcap_file(self, file: UploadedFile) -> bool:
-        """Validates if a file is a valid pcap or pcapng using magic numbers
-
-        Args:
-            file (UploadFile): A Streamlit mutable uploaded file
-
-        Returns:
-            bool: True if the file is a valid pcap or pcapng, False if not
-        """
-        pcap_magic_numbers = [
-            b"\xd4\xc3\xb2\xa1",
-            b"\xa1\xb2\xc3\xd4",
-            b"\x4d\x3c\xb2\xa1",
-            b"\xa1\xb2\x3c\x4d",
-        ]
-        pcapng_magic_number = b"\x0a\x0d\x0d\x0a"
-
-        try:
-            magic_number = file.read(4)
-            if (
-                magic_number in pcap_magic_numbers
-                or magic_number == pcapng_magic_number
-            ):
-                return True
-            else:
-                return False
-        except Exception as e:
-            st.error(f"Error reading file: {e}")
-            return False
 
     def get_primary_ip_address(self) -> str:
         """Return the primary IP address of the host this script is running on
