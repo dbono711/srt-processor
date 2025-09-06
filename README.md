@@ -44,6 +44,8 @@ To build the Docker image locally from the Dockerfile included in this repositor
 
 Alternatively, you can pull the pre-built Docker image from Docker Hub:
 
+> **Note**: The Docker Hub image is built for AMD64 architecture only. If you're running on ARM64 (e.g., Apple Silicon Macs), please [build locally](#building-the-docker-image-locally) instead.
+
 1. Pull the Docker image from Docker Hub:
 
     ```shell
