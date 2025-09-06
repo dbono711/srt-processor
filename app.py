@@ -6,7 +6,9 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from dotenv import load_dotenv
 from loggerfactory import LoggerFactory
+from openai import OpenAI
 from process_manager import SrtProcessManager
 from toolbox import Toolbox
 from typing import Any, List, Optional, Tuple
@@ -516,45 +518,44 @@ def _display_transport_stream_data(srt_manager: SrtProcessManager) -> None:
     if srt_manager.check_for_valid_mpeg_ts():
         programs = srt_manager.show_mpeg_ts_programs()
 
-        # Display programs dataframe
-        programs_df = pd.json_normalize(programs["programs"]).drop(
-            columns=["tags.service_provider", "streams"]
-        )
+        # Extract and display programs data
+        programs_data = programs["programs"]
+        programs_df = pd.DataFrame([
+            {
+                "program_id": p["program_id"],
+                "program_num": p["program_num"], 
+                "nb_streams": p["nb_streams"],
+                "pmt_pid": p["pmt_pid"],
+                "pcr_pid": p["pcr_pid"],
+                "service_name": p["tags"]["service_name"]
+            }
+            for p in programs_data
+        ])
         st.dataframe(programs_df, hide_index=True, use_container_width=True)
 
-        # Process streams data
+        # Extract and display streams data efficiently
         streams_data = []
-        for program in programs["programs"]:
-            streams_data.extend(program["streams"])
-
-        # Define base columns for streams
-        base_columns = [
-            "index",
-            "codec_name",
-            "codec_long_name",
-            "profile",
-            "codec_type",
-            "width",
-            "height",
-            "display_aspect_ratio",
-            "field_order",
-            "start_time",
-            "duration",
-            "bit_rate",
-            "tags.language",
-        ]
-
-        # Extract only columns that exist in the data
-        present_columns = [
-            col
-            for col in base_columns
-            if col in pd.json_normalize(streams_data, errors="ignore").columns
-        ]
-
-        # Display streams dataframe
-        streams_df = pd.json_normalize(streams_data, errors="ignore")[
-            present_columns
-        ]
+        for program in programs_data:
+            for stream in program["streams"]:
+                # Extract only the fields we need
+                stream_info = {
+                    "index": stream.get("index"),
+                    "codec_name": stream.get("codec_name"),
+                    "codec_long_name": stream.get("codec_long_name"),
+                    "profile": stream.get("profile"),
+                    "codec_type": stream.get("codec_type"),
+                    "width": stream.get("width"),
+                    "height": stream.get("height"),
+                    "display_aspect_ratio": stream.get("display_aspect_ratio"),
+                    "field_order": stream.get("field_order"),
+                    "start_time": stream.get("start_time"),
+                    "duration": stream.get("duration"),
+                    "bit_rate": stream.get("bit_rate"),
+                    "language": stream.get("tags", {}).get("language")
+                }
+                streams_data.append(stream_info)
+        
+        streams_df = pd.DataFrame(streams_data)
         st.dataframe(streams_df, hide_index=True, use_container_width=True)
 
         # Add download button
@@ -577,20 +578,118 @@ def _display_raw_data(data: pd.DataFrame) -> None:
     st.dataframe(data, use_container_width=True, hide_index=True)
 
 
+@st.cache_data(show_spinner=False)
+def _llm_analysis() -> None:
+    """Perform LLM analysis on the provided data."""
+    instructions = """
+        # Role and Objective
+        You are an SRT (Secure Reliable Transport) streaming analysis expert. Your primary goal is to help network engineers, broadcasters, and streaming professionals analyze SRT session statistics, identify performance issues, and optimize streaming configurations.
+        
+        # Application Context - IMPORTANT
+        This application is ALWAYS the SRT receiver/destination for video streaming:
+        - **SRT Handshake Role**: Can be either "SRT Listener" or "SRT Caller" 
+        - **SRT Flow Direction**: ALWAYS the receiver - never sends video content
+        - **Data Analysis Focus**: All statistics are from the receiver's perspective
+        - **Stream Direction**: Video flows FROM remote source TO this application
+        
+        # Available Data Context
+        You have access to SRT receiver-side statistics including:
+        - Round-Trip Time (RTT) and jitter measurements
+        - Bandwidth utilization and receive rates  
+        - Buffer metrics (available receive buffer, receive buffer time)
+        - Packet statistics (received, lost, dropped, retransmitted)
+        - Session duration and connection details
+        
+        # Instructions
+        ## Analysis Guidelines
+        - Focus on receiver-side SRT performance metrics and their implications
+        - Identify patterns in network behavior that affect streaming quality at the destination
+        - Correlate different metrics to diagnose root causes of reception issues
+        - Provide actionable recommendations for SRT receiver configuration optimization
+        
+        ## Response Guidelines
+        - Provide technical insights relevant to live streaming reception and SRT protocols
+        - Explain how network conditions impact streaming quality and user experience at the receiver
+        - Suggest specific SRT receiver parameter adjustments when appropriate
+        - Use streaming industry terminology and best practices for destination/receiver optimization
+        
+        # Key Analysis Areas
+        1. **Network Stability**: Analyze RTT and jitter patterns for connection quality
+        2. **Reception Efficiency**: Compare available bandwidth vs actual receive rates
+        3. **Buffer Management**: Evaluate receiver buffer utilization and potential underruns/overruns
+        4. **Packet Loss Recovery**: Assess retransmission effectiveness and loss patterns from receiver perspective
+        5. **Session Health**: Overall connection stability and reception performance trends
+        
+        # Output Format
+        - **Performance Summary**: Brief overview of reception session health
+        - **Key Findings**: Bullet points highlighting important observations from receiver perspective
+        - **Recommendations**: Specific actions to improve streaming reception performance
+        - **Technical Details**: Detailed analysis with supporting receiver-side data
+        
+        # Examples
+        ## Example 1: High Jitter Analysis
+        "The receiver shows significant jitter spikes (>50ms) correlating with packet loss events. This suggests network congestion affecting reception quality. Recommend increasing SRT receiver latency buffer (SRTO_RCVLATENCY) and configuring adaptive reception parameters to handle network instability."
+        
+        ## Example 2: Buffer Optimization
+        "Available receive buffer consistently near zero indicates potential underruns at the receiver. Consider increasing SRTO_RCVBUF size or requesting sender to reduce encoding bitrate to match receiver's network capacity."
+        
+        Focus on providing actionable insights that help optimize SRT streaming reception performance and troubleshoot network-related issues affecting live video delivery to this destination.
+    """
+    
+    try:
+        client = OpenAI()
+        
+        # Load SRT statistics documentation for context
+        statistics_doc = ""
+        try:
+            with open("statistics.md", "r") as f:
+                statistics_doc = f.read()
+        except FileNotFoundError:
+            st.warning("statistics.md not found - analysis will proceed without detailed metric definitions")
+        
+        # Load CSV data
+        with open(_SRT_STATS, "r") as f:
+            csv_data = f.read()
+
+        # Prepare input with documentation context
+        analysis_input = \
+            f"""# SRT Statistics Documentation Context
+            {statistics_doc}
+
+            # SRT Session CSV Data to Analyze
+            {csv_data}
+        """
+
+        response = client.responses.create(
+            model="gpt-4.1-mini",
+            instructions=instructions,
+            input=f"Using the SRT statistics documentation provided as context, analyze this SRT session CSV data and provide detailed insights:\n\n{analysis_input}"
+        )
+        
+        st.markdown(response.output_text)
+        
+    except Exception as e:
+        st.error(f"LLM Analysis unavailable: {str(e)}")
+        st.info("To enable LLM analysis, ensure your OpenAI API key is configured in the environment.")
+
+
 st.set_page_config(page_title="SRT Processor", layout="wide", page_icon="📹")
 st.title("SRT Processor")
 st.markdown(
     """
-    Spawn an [srt-live-transmit](https://github.com/Haivision/srt/blob/master/docs/apps/srt-live-transmit.md) 
-    process. This application can function as either ```listener``` or ```caller``` 
+    Interactive application for analyzing Secure Reliable Transport (SRT) flows using 
+    [srt-live-transmit](https://github.com/Haivision/srt/blob/master/docs/apps/srt-live-transmit.md).
+    The application can function as either ```listener``` or ```caller```
     from a session handshake perspective, but will always be the receiver from a 
-    session flow perspective. Note, the most recent session's statistics will be displayed 
-    until a new one is initiated.
+    session flow perspective. The analysis is based on statistics generated by the 
+    srt-live-transmit process, which are logged every 100 packets. Note, the 
+    most recent session will be displayed until a new one is initiated.
     """
 )
 
 _SRT_STATS = "./srt/received.ts.stats"
 
+load_dotenv("secrets.env")
 toolbox = Toolbox()
 logger = LoggerFactory.get_logger("app", log_level="WARNING")
 srt_manager = _get_srt_process_manager(logger)
@@ -726,76 +825,34 @@ elif os.stat(_SRT_STATS).st_size == 0:
 else:
     logger.info("Displaying SRT session data...")
 
-    # load and process statistics
-    data = _read_data(_SRT_STATS)
-    if data is None:
-        st.stop()
-
-    # create tabs
-    session, transport_stream, raw_data, faq = st.tabs(
-        ["Session", "Transport Stream", "Raw Session Data", "FAQ"]
-    )
-
-    # session tab content
-    with session:
-        # display key metrics at the top
-        _display_session_metrics(data)
+    with st.spinner("Analyzing SRT session data..."):
+        # load and process statistics
+        data = _read_data(_SRT_STATS)
+        if data is None:
+            st.stop()
         
-        # display detailed metrics in expandable sections
-        _display_rtt_jitter_metrics(data)
-        _display_bandwidth_metrics(data)
-        _display_buffer_metrics(data)
-        _display_packet_metrics(data)
+        _display_session_metrics(data)
 
-    # transport stream tab content
-    with transport_stream:
-        _display_transport_stream_data(srt_manager)
+        # create tabs
+        summary, charts, transport_stream, raw_data = st.tabs(
+            ["Summary", "Charts", "Transport Stream", "Raw Session Data"]
+        )
 
-    # raw data tab content
-    with raw_data:
-        _display_raw_data(data)
-    
-    # faq tab content
-    with faq:
-        with st.expander("What is this application?"):
-            st.write(
-                """
-                ```srt-processor``` is an interactive platform designed to serve as both 
-                a learning environment and a troubleshooting tool for analyzing Secure 
-                Reliable Transport (SRT) flows. This project enables users to delve deep 
-                into the statistcs generated by SRT sessions, offering insight into SRT 
-                communication.
-                """
-            )
-        with st.expander("What is SRT?"):
-            st.write(
-                """
-                Secure Reliable Transport (SRT) is an open-source protocol developed 
-                by Haivision in 2012, designed to optimize live video streaming over 
-                unpredictable IP networks, particularly the public internet. Released 
-                to the industry through the SRT Alliance in 2017, SRT has rapidly become 
-                a critical tool for industries like broadcasting, OTT streaming, and 
-                enterprise communications. Its core features include low-latency 
-                transmission, robust error correction, and end-to-end encryption, making 
-                it ideal for secure and reliable live video transport.
-                
-                SRT leverages Automatic Repeat reQuest (ARQ) and other techniques to 
-                ensure high-quality video delivery even over unreliable networks. Its 
-                focus on security through 128/256-bit AES encryption ensures that video 
-                streams are protected from unauthorized access and tampering. These 
-                attributes make SRT highly valuable for live broadcasts, remote production, 
-                and cloud-based workflows.
-                
-                Within the media value chain, SRT plays a key role in both content contribution 
-                and distribution, allowing broadcasters to move video from field locations 
-                to broadcast centers or cloud platforms with reliability and low latency. 
-                Its open-source nature and ability to integrate into IP-based workflows position 
-                SRT as a flexible and cost-effective alternative to traditional video transmission 
-                methods like satellite, and proprietary protocols such as RTMP and Zixi.
-                
-                SRT’s rapid adoption by the industry, combined with its scalability and strong 
-                performance in challenging network environments, has made it a crucial component 
-                in the evolution of digital video broadcasting, particularly as the industry 
-                shifts toward cloud-based and IP-driven infrastructures.
-                """
-            )
+        with summary:
+            _llm_analysis()
+
+        # session tab content
+        with charts:
+            # display detailed metrics in expandable sections
+            _display_rtt_jitter_metrics(data)
+            _display_bandwidth_metrics(data)
+            _display_buffer_metrics(data)
+            _display_packet_metrics(data)
+
+        # transport stream tab content
+        with transport_stream:
+            _display_transport_stream_data(srt_manager)
+
+        # raw data tab content
+        with raw_data:
+            _display_raw_data(data)
