@@ -2,14 +2,13 @@
 
 ## Overview
 
-Interactive platform designed to serve as both a learning environment and a troubleshooting tool for analyzing Secure Reliable Transport (SRT) flows, enabling users to explore the intricacies of SRT through live streaming sessions.
+Interactive Streamlit application designed to serve as both a learning environment and a troubleshooting tool for analyzing [Secure Reliable Transport (SRT)](#what-is-srt) flows, enabling users to explore the intricacies of SRT through live streaming sessions.
 
-The application allows users to initiate live SRT streams for real-time analysis. Through a combination of open-source tools and custom processing libraries, ```srt-processor``` provides a comprehensive view of SRT statistics, offering invaluable insights for network engineers, developers, and anyone interested in learning SRT.
+The application allows content to be received via live SRT streams (as either caller or listener) and analyzed for real-time analysis. Under the hood, the applicaiton is invoking the [srt-live-transmit](https://github.com/Haivision/srt/blob/master/docs/apps/srt-live-transmit.md#command-line-options) application to receive the SRT stream and is using the statistics output from the `srt-live-transmit` application to provide the data for real-time analysis, providing a comprehensive view of SRT statistics.
 
 ## Prerequisites
 
-- Docker installed on your local machine
-- Git installed on your local machine (only required if [building locally](#building-the-docker-image-locally) or [development](#development))
+- Docker
 
 ## Container Ports
 
@@ -107,6 +106,7 @@ This repository includes a [docker-compose.dev.yml](docker-compose.dev.yml) file
 Before proceeding, ensure you have the following installed:
 
 - Docker
+- Git
 
 ### Development Setup
 
@@ -137,6 +137,16 @@ make dev
 ```shell
 make stop
 ```
+
+## What is SRT?
+
+[Secure Reliable Transport (SRT)](https://github.com/Haivision/srt) is an open-source protocol developed by Haivision in 2012, designed to optimize live video streaming over unpredictable IP networks, particularly the public internet. Released to the industry through the SRT Alliance in 2017, SRT has rapidly become a critical tool for industries like broadcasting, OTT streaming, and enterprise communications. Its core features include low-latency transmission, robust error correction, and end-to-end encryption, making it ideal for secure and reliable live video transport.
+
+SRT leverages Automatic Repeat reQuest (ARQ) and other techniques to ensure high-quality video delivery even over unreliable networks. Its focus on security through 128/256-bit AES encryption ensures that video streams are protected from unauthorized access and tampering. These attributes make SRT highly valuable for live broadcasts, remote production, and cloud-based workflows.
+
+Within the media value chain, SRT plays a key role in both content contribution and distribution, allowing broadcasters to move video from field locations to broadcast centers or cloud platforms with reliability and low latency. Its open-source nature and ability to integrate into IP-based workflows position SRT as a flexible and cost-effective alternative to traditional video transmission methods like satellite, and proprietary protocols such as RTMP and Zixi.
+
+SRT’s rapid adoption by the industry, combined with its scalability and strong performance in challenging network environments, has made it a crucial component in the evolution of digital video broadcasting, particularly as the industry shifts toward cloud-based and IP-driven infrastructures.
 
 ## License
 
