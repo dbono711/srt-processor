@@ -2,18 +2,36 @@ import logging
 
 
 class LoggerFactory(object):
-    """Docstring missing."""
+    """
+    Factory class for creating logger objects with a specified log file
+    and logging level. It provides a static method to initialize logger
+    objects in other modules.
+
+    Attributes:
+        _LOG (logging.Logger): A class variable to store the logger object.
+
+    Methods:
+        __create_logger(log_file: str, log_level: str) -> logging.Logger:
+            A private method that interacts with the python logging module.
+
+        get_logger(log_file: str, log_level: str) -> logging.Logger:
+            A static method called by other modules to initialize logger
+            in their own module.
+    """
 
     _LOG = None
 
     @staticmethod
     def __create_logger(log_file: str, log_level: str):
-        """A private method that interacts with the python
-        logging module
+        """
+        A private method that interacts with the python logging module.
 
         Args:
-            log_file (str): Name of the log file
-            log_level (str): Logging level
+            log_file (str): Name of the log file.
+            log_level (str): Logging level.
+
+        Returns:
+            logging.Logger: Logger object.
         """
         # set the logging format
         log_format = "%(asctime)s:%(levelname)s:%(message)s"
@@ -24,7 +42,7 @@ class LoggerFactory(object):
             level=logging.INFO,
             format=log_format,
             datefmt="%Y-%m-%d %H:%M:%S",
-            filename=f"logs/{log_file}.log",
+            filename=f"{log_file}.log",
         )
 
         # set the logging level based on the user selection
@@ -38,11 +56,15 @@ class LoggerFactory(object):
 
     @staticmethod
     def get_logger(log_file: str, log_level: str):
-        """A static method called by other modules to initialize
-        logger in their own module
+        """
+        A static method called by other modules to initialize logger
+        in their own module.
 
         Args:
-            log_file (str): Name of the log file
-            log_level (str): Logging level
+            log_file (str): Name of the log file.
+            log_level (str): Logging level.
+
+        Returns:
+            logging.Logger: Logger object.
         """
         return LoggerFactory.__create_logger(log_file, log_level)
