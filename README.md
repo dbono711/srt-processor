@@ -2,7 +2,7 @@
 
 ## Overview
 
-Interactive Streamlit application designed to serve as both a learning environment and a troubleshooting tool for analyzing [Secure Reliable Transport (SRT)](#what-is-srt) flows, enabling users to explore the intricacies of SRT through live streaming sessions.
+Interactive Streamlit application for analyzing [Secure Reliable Transport (SRT)](#what-is-srt) flows, enabling users to explore the intricacies of SRT through live streaming sessions.
 
 The application allows content to be received via live SRT streams (as either caller or listener) and analyzed for real-time analysis. Under the hood, the applicaiton is invoking the [srt-live-transmit](https://github.com/Haivision/srt/blob/master/docs/apps/srt-live-transmit.md#command-line-options) application to receive the SRT stream and is using the statistics output from the `srt-live-transmit` application to provide the data for real-time analysis, providing a comprehensive view of SRT statistics.
 
@@ -31,14 +31,28 @@ To build the Docker image locally from the Dockerfile included in this repositor
 2. Build the Docker image:
 
     ```shell
-    docker build -t srt-processor .
+    docker build -t srt-processor:latest .
     ```
 
-3. Run the Docker container with port forwarding (adjust accordingly for mapping to available ports on your host). Note that the ```--cap-add=NET_ADMIN``` argument is required in order to utilize the network emulation options.
+3. Run the Docker container with port forwarding (adjust accordingly for mapping to available ports on your host).
 
     ```shell
     docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp --cap-add=NET_ADMIN --name srt-processor srt-processor:latest
     ```
+
+    > **Note**: The ```CAP_ADD=NET_ADMIN``` argument is required in order to utilize the network emulation options.
+
+### Optional Feature: Enable LLM-Powered Analysis
+
+To enable the LLM-powered SRT session analysis feature, provide your OpenAI API key as an environment variable:
+
+```shell
+docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp --cap-add=NET_ADMIN \
+  -e OPENAI_API_KEY=your_openai_api_key_here \
+  --name srt-processor srt-processor:latest
+```
+
+> **Note**: The LLM-powered analysis feature is optional. The application will function normally without it, but you'll have access to intelligent insights and recommendations about your SRT session performance when the API key is provided.
 
 ## Pulling the Docker Image from Docker Hub
 
@@ -52,11 +66,25 @@ Alternatively, you can pull the pre-built Docker image from Docker Hub:
     docker pull dbono711/srt-processor:latest
     ```
 
-2. Run the Docker container with port forwarding (adjust accordingly for mapping to available ports on your host). Note that the ```--cap-add=NET_ADMIN``` argument is required in order to utilize the network emulation options.
+2. Run the Docker container with port forwarding (adjust accordingly for mapping to available ports on your host).
 
     ```shell
     docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp --cap-add=NET_ADMIN --name srt-processor dbono711/srt-processor:latest
     ```
+
+    > **Note**: The ```CAP_ADD=NET_ADMIN``` argument is required in order to utilize the network emulation options.
+
+### Optional Feature: Enable LLM-Powered Analysis
+
+To enable the LLM-powered SRT session analysis feature, provide your OpenAI API key as an environment variable:
+
+```shell
+docker run -d -p 8501:8501/tcp -p 9000-9100:9000-9100/udp --cap-add=NET_ADMIN \
+  -e OPENAI_API_KEY=your_openai_api_key_here \
+  --name srt-processor dbono711/srt-processor:latest
+```
+
+> **Note**: The LLM-powered analysis feature is optional. The application will function normally without it, but you'll have access to intelligent insights and recommendations about your SRT session performance when the API key is provided.
 
 ## Accessing the Application
 
@@ -118,7 +146,17 @@ Clone the repository to your local machine using the following command:
 
 ```git clone https://github.com/dbono711/srt-processor.git```
 
-2. Start the Development Container
+2. Optional: Enable LLM-Powered Analysis
+
+To enable the LLM analysis feature during development, set your OpenAI API key as an environment variable prior to running the development container:
+
+```shell
+export OPENAI_API_KEY=your_openai_api_key_here
+```
+
+> **Note**: This step is optional. The application will function normally without it, but you'll have access to intelligent insights and recommendations about your SRT session performance when the API key is provided.
+
+3. Start the Development Container
 
 Navigate to the cloned repository folder and run the following command:
 
@@ -128,11 +166,11 @@ cd srt-processor
 make dev
 ```
 
-3. View the Application
+4. View the Application
 
 - Once the development environment is up and running, you can access the Streamlit application by navigating to: ```http://<host ip>:8501```
 
-4. Stop the Development Container
+5. Stop the Development Container
 
 - To stop the development container, run the following command:
 

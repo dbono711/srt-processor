@@ -6,7 +6,6 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from dotenv import load_dotenv
 from loggerfactory import LoggerFactory
 from openai import OpenAI
 from process_manager import SrtProcessManager
@@ -581,6 +580,15 @@ def _display_raw_data(data: pd.DataFrame) -> None:
 @st.cache_data(show_spinner=False)
 def _llm_analysis() -> None:
     """Perform LLM analysis on the provided data."""
+    
+    # Check if OpenAI API key is available
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        st.warning("🔑 LLM Analysis Unavailable")
+        st.info("To enable AI-powered analysis of your SRT session data, provide an OpenAI API key as an environment variable when running the container:")
+
+        return
+    
     instructions = """
         # Role and Objective
         You are an SRT (Secure Reliable Transport) streaming analysis expert. Your primary goal is to help network engineers, broadcasters, and streaming professionals analyze SRT session statistics, identify performance issues, and optimize streaming configurations.
@@ -637,7 +645,7 @@ def _llm_analysis() -> None:
     """
     
     try:
-        client = OpenAI()
+        client = OpenAI(api_key=api_key)
         
         # Load SRT statistics documentation for context
         statistics_doc = ""
@@ -669,11 +677,11 @@ def _llm_analysis() -> None:
         st.markdown(response.output_text)
         
     except Exception as e:
-        st.error(f"LLM Analysis unavailable: {str(e)}")
-        st.info("To enable LLM analysis, ensure your OpenAI API key is configured in the environment.")
+        st.error(f"LLM Analysis failed: {str(e)}")
+        st.info("Please verify your OpenAI API key is valid and has sufficient credits.")
 
 
-st.set_page_config(page_title="SRT Processor", layout="wide", page_icon="📹")
+st.set_page_config(page_title="SRT Processor", layout="wide", page_icon="")
 st.title("SRT Processor")
 st.markdown(
     """
@@ -689,7 +697,6 @@ st.markdown(
 
 _SRT_STATS = "./srt/received.ts.stats"
 
-load_dotenv("secrets.env")
 toolbox = Toolbox()
 logger = LoggerFactory.get_logger("app", log_level="WARNING")
 srt_manager = _get_srt_process_manager(logger)
