@@ -49,7 +49,7 @@ class Toolbox:
         chart.update_layout(
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
-        st.plotly_chart(chart, config={"displaylogo": False}, use_container_width=True)
+        st.plotly_chart(chart, config={"displaylogo": False}, width="stretch")
 
     def get_primary_ip_address(self) -> str:
         """Return the primary IP address of the host this script is running on

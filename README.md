@@ -96,34 +96,37 @@ You can use FFmpeg to stream media to the SRT Processor application when it's co
 
 1. First, ensure the SRT Processor application is running and configured in Listener mode on the desired port (e.g., 9000).
 
-2. Use the following FFmpeg command to stream a video file to the SRT Processor:
+2. Use the following FFmpeg command to stream (as SRT caller) a video file to the SRT Processor (as SRT listener):
 
     ```shell
     docker run --rm -v $(pwd):$(pwd) -w $(pwd) \
-        --name ffmpeg-stream jrottenberg/ffmpeg:4.4-ubuntu \
+        --name ffmpeg-stream jrottenberg/ffmpeg:8-ubuntu \
         -stats \
         -re \
-        -i sample_1280x720_surfing_with_audio.mp4 \
-        -c:v libx264 -b:v 2500k -g 60 -keyint_min 60 \
-        -profile:v main \
-        -preset fast \
+        -i [insert your input file path here] \
+        -c:v libx264 -b:v 2500k -maxrate 2750k -bufsize 5000k \
+        -g 60 -keyint_min 60 -sc_threshold 0 \
+        -profile:v main -preset fast -tune zerolatency \
+        -c:a aac -b:a 128k -ar 48000 \
         -f mpegts "srt://<container-ip>:9000?pkt_size=1316"
     ```
 
-    Replace `<container-ip>` with the IP address of your SRT Processor container, and adjust the input file path as needed.
-
-    Assumes a file named ```sample_1280x720_surfing_with_audio.mp4``` is present in the current directory. Replace with your own file path as needed.
-
 3. Command breakdown:
+   - `docker run --rm -v $(pwd):$(pwd) -w $(pwd) --name ffmpeg-stream jrottenberg/ffmpeg:8-ubuntu`: Runs ffmpeg in a disposable container (removed on exit), mounting the current directory into itself at the same path and setting it as the working directory so a relative input file path resolves correctly
    - `-stats`: Shows encoding progress statistics
    - `-re`: Reads input at native frame rate (simulates a live source)
-   - `-c:v libx264`: Uses H.264 video codec
-   - `-b:v 2500k`: Sets video bitrate to 2500 kbps
-   - `-g 60 -keyint_min 60`: Sets GOP size and minimum keyframe interval to 60 frames
+   - `-i [insert your input file path here]`: Path to the source media file to stream; replace with your own file
+   - `-c:v libx264`: Uses the H.264 video codec
+   - `-b:v 2500k`: Sets the target video bitrate to 2500 kbps
+   - `-maxrate 2750k -bufsize 5000k`: Caps the peak bitrate and sets the VBV buffer size, keeping the encoder's output rate constrained for streaming
+   - `-g 60 -keyint_min 60`: Sets the GOP size and minimum keyframe interval to 60 frames
+   - `-sc_threshold 0`: Disables scene-change detection so keyframes only land on the `-g` interval, not wherever the encoder detects a scene cut
    - `-profile:v main`: Uses the "main" H.264 profile
    - `-preset fast`: Balances encoding speed and compression efficiency
-   - `-f mpegts`: Sets output format to MPEG Transport Stream
-   - `pkt_size=1316`: Optimizes SRT packet size for network transmission
+   - `-tune zerolatency`: Tunes the encoder for low-latency streaming by disabling lookahead and B-frames that would otherwise add delay
+   - `-c:a aac -b:a 128k -ar 48000`: Encodes audio as AAC at 128 kbps with a 48 kHz sample rate
+   - `-f mpegts`: Sets the output format to MPEG Transport Stream
+   - `pkt_size=1316`: An SRT URI parameter (not an ffmpeg flag) that sets the SRT payload size per packet, optimized for network transmission
 
 4. Once the stream starts, you should see the SRT statistics updating in the SRT Processor web interface.
 

@@ -14,6 +14,16 @@ services:
     environment:
       # Optional: Provide OpenAI API key for LLM analysis feature
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    command:
+      # Auto-apply file changes on save and poll for changes, since native
+      # file-change events aren't reliable across the bind mount
+      - streamlit
+      - run
+      - app.py
+      - --server.address=0.0.0.0
+      - --server.port=8501
+      - --server.runOnSave=true
+      - --server.fileWatcherType=poll
     cap_add:
       - NET_ADMIN
     stdin_open: true

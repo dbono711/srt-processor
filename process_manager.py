@@ -54,6 +54,8 @@ class SrtProcessManager(ProcessManager):
         """
         super().__init__(logger)
         self.connection_established = False
+        self.session_end_ts: Optional[float] = None
+        self.connected_host: Optional[str] = None
 
     def start_process(
         self, version: str, mode: str, port: int, timeout: int, ip: str
@@ -95,6 +97,8 @@ class SrtProcessManager(ProcessManager):
             stderr=subprocess.PIPE,
             text=True,
         )
+        self.session_end_ts = time.time() + timeout
+        self.connected_host = None
         threading.Thread(target=self.monitor_connection_status).start()
 
     def monitor_connection_status(self) -> None:
@@ -109,6 +113,7 @@ class SrtProcessManager(ProcessManager):
         while self.process.poll() is None:
             if os.stat("./srt/received.ts.stats").st_size != 0:
                 self.connection_established = True
+                self.connected_host = self.extract_connected_ip_port()
                 break
             time.sleep(1)
 
@@ -139,6 +144,18 @@ class SrtProcessManager(ProcessManager):
             bool: True if the connection is established, False otherwise.
         """
         return self.connection_established
+
+    def get_session_remaining_seconds(self) -> Optional[float]:
+        """
+        Get the number of seconds remaining in the current SRT session countdown.
+
+        Returns:
+            Optional[float]: Seconds remaining, or None if no session has been started.
+        """
+        if self.session_end_ts is None:
+            return None
+
+        return self.session_end_ts - time.time()
 
     def check_for_valid_mpeg_ts(self) -> Optional[bool]:
         """
@@ -224,6 +241,65 @@ class SrtProcessManager(ProcessManager):
             return None
         except json.JSONDecodeError as e:
             self.logger.info(f"Failed to parse JSON output: {e}")
+            return None
+
+    def capture_preview_frame(
+        self, output_path: str = "srt/frame.jpg", seek_offset: float = 3.0
+    ) -> Optional[str]:
+        """
+        Capture a recent frame from the in-progress MPEG-TS capture as a JPEG.
+
+        Uses ffmpeg's `-sseof` to seek backward from end-of-file so it grabs a
+        recent frame without decoding the whole (growing) file from the start
+        on every call. A non-zero ffmpeg exit is expected/routine early in a
+        session (the file is too short to seek `seek_offset` seconds into
+        yet), so it's treated as a normal miss rather than an error.
+
+        Args:
+            output_path (str): Where to write the captured JPEG frame.
+            seek_offset (float): Seconds to seek back from end-of-file.
+
+        Returns:
+            Optional[str]: output_path on success, None if no frame could be captured.
+        """
+        try:
+            result = subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-sseof",
+                    f"-{seek_offset}",
+                    "-i",
+                    "srt/received.ts",
+                    "-update",
+                    "1",
+                    "-frames:v",
+                    "1",
+                    "-f",
+                    "image2",
+                    output_path,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=10,
+            )
+
+            if result.returncode != 0:
+                self.logger.info(f"Frame capture skipped: {result.stderr.strip()}")
+                return None
+
+            if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+                self.logger.info("Frame capture produced no output file.")
+                return None
+
+            return output_path
+
+        except subprocess.TimeoutExpired:
+            self.logger.error("Frame capture timed out.")
+            return None
+        except FileNotFoundError:
+            self.logger.error("ffmpeg command not found.")
             return None
 
     def add_network_emulation(self, intf: str, delay: int) -> None:

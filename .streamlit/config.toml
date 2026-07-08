@@ -1,10 +1,10 @@
 [theme]
-base = "dark"
-primaryColor = "#ff8c02" # - Primary accent color for interactive elements
-backgroundColor = "#00325b" # - Background color for the main content area
-secondaryBackgroundColor = "#3a709b" # - Background color used for the sidebar and most interactive widgets
-textColor = "#ffffff" # Color used for almost all text
-font = "sans serif" # Font family for text in the app, except code blocks ["sans serif", "serif", or "monospace"]
+base = "light"
+# primaryColor = "#ff8c02" # - Primary accent color for interactive elements
+# backgroundColor = "#00325b" # - Background color for the main content area
+# secondaryBackgroundColor = "#3a709b" # - Background color used for the sidebar and most interactive widgets
+# textColor = "#ffffff" # Color used for almost all text
+# font = "sans serif" # Font family for text in the app, except code blocks ["sans serif", "serif", or "monospace"]
 
 [server]
 headless = true
@@ -14,7 +14,7 @@ enableXsrfProtection = true
 enableWebsocketCompression = true
 
 [client]
-toolbarMode = "minimal"
+toolbarMode = "developer"
 
 [logger]
 level = "error"
